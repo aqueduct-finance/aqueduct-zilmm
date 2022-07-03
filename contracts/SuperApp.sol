@@ -6,12 +6,11 @@ import {SuperAppBase} from "@superfluid-finance/ethereum-contracts/contracts/app
 import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/apps/CFAv1Library.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
-import "@openzeppelin/contracts/utils/Strings.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Factory.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import "./OracleLibrary.sol";
+import "./libraries/UQ112x112.sol";
 
 contract SuperApp is SuperAppBase {
+    using UQ112x112 for uint224;
+
     /* --- Superfluid --- */
     using CFAv1Library for CFAv1Library.InitData;
     CFAv1Library.InitData public cfaV1;
@@ -20,33 +19,37 @@ contract SuperApp is SuperAppBase {
     IConstantFlowAgreementV1 cfa;
     ISuperfluid _host;
 
-    /* --- Uniswap --- */
-    IUniswapV3Factory public immutable uniswapFactory;
-
     /* --- Pool variables --- */
-    ISuperToken private token0;
-    ISuperToken private token1;
-    int96 tokenRatio = 1; // tokenRatio = amount(token0) / amount(token1)
-    address wmaticAddress = 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889;
+    ISuperToken public token0;
+    ISuperToken public token1;
 
-    constructor(ISuperfluid host, address _uniswapFactory) payable {
+    uint112 private flowIn0;
+    uint112 private flowIn1;
+    uint32 private blockTimestampLast;
+
+    uint256 public price0CumulativeLast;
+    uint256 public price1CumulativeLast;
+
+    // map user address to their starting price cumulatives
+    struct UserPriceCumulative {
+        uint256 price0Cumulative;
+        uint256 price1Cumulative;
+    }
+    mapping(address => UserPriceCumulative) private userPriceCumulatives;
+
+    constructor(ISuperfluid host) payable {
         assert(address(host) != address(0));
 
         _host = host;
-        token0 = ISuperToken(0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f); // fDAIx address (mumbai)
+        token0 = ISuperToken(0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f); // fDAIx address (mumbai) // TODO: set these using init function from a factory contract
         token1 = ISuperToken(0x96B82B65ACF7072eFEb00502F45757F254c2a0D4); // MATICx address (mumbai)
-
-        uniswapFactory = IUniswapV3Factory(_uniswapFactory);
 
         cfa = IConstantFlowAgreementV1(address(host.getAgreementClass(CFA_ID)));
         cfaV1 = CFAv1Library.InitData(host, cfa);
 
         uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL |
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_UPDATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP |
-            SuperAppDefinitions.AFTER_AGREEMENT_UPDATED_NOOP | // remove once added
-            SuperAppDefinitions.AFTER_AGREEMENT_TERMINATED_NOOP; // remove once added
+            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
 
         host.registerApp(configWord);
     }
@@ -60,15 +63,6 @@ contract SuperApp is SuperAppBase {
         returns (ISuperToken)
     {
         return address(tokenIn) == address(token0) ? token1 : token0;
-    }
-
-    function getUnderlyingTokenSafe(ISuperToken token)
-        internal
-        view
-        returns (address)
-    {
-        address underlyingToken = token.getUnderlyingToken();
-        return underlyingToken == address(0) ? wmaticAddress : underlyingToken;
     }
 
     /* Gets address of wallet that initiated stream (msg.sender would just point to this contract) */
@@ -92,133 +86,77 @@ contract SuperApp is SuperAppBase {
         return flowRate;
     }
 
-    /* Oracle helper func */
-    function getQuoteAtTick(
-        int24 tick,
-        uint128 baseAmount,
-        address baseToken,
-        address quoteToken
-    ) internal pure returns (uint256 quoteAmount) {
-        uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
-
-        // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
-        if (sqrtRatioX96 <= type(uint128).max) {
-            uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
-            quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX192, baseAmount, 1 << 192)
-                : FullMath.mulDiv(1 << 192, baseAmount, ratioX192);
-        } else {
-            uint256 ratioX128 = FullMath.mulDiv(
-                sqrtRatioX96,
-                sqrtRatioX96,
-                1 << 64
-            );
-            quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX128, baseAmount, 1 << 128)
-                : FullMath.mulDiv(1 << 128, baseAmount, ratioX128);
-        }
-    }
-
-    /* Interacts with Uniswap V3 price oracle */
-    function estimateAmountOut(
-        address _tokenIn,
-        address _tokenOut,
-        uint128 _amountIn,
-        uint32 _secondsAgo, // duration of the TWAP - Time-weighted average price
-        uint24 _fee
-    ) internal view returns (uint256 amountOut) {
-        address pool = uniswapFactory.getPool(_tokenIn, _tokenOut, _fee);
-        require(
-            pool != address(0),
-            string.concat(
-                "Pool does not exist:  ",
-                "Token:",
-                Strings.toHexString(uint256(uint160(_tokenIn)), 20),
-                "Token2:",
-                Strings.toHexString(uint256(uint160(_tokenOut)), 20),
-                "Pool:",
-                Strings.toHexString(uint256(uint160(pool)), 20)
-            )
-        );
-
-        // Some of this code is copied from the UniswapV3 Oracle library
-        // we save gas by removing the code that calculates the harmonic mean liquidity
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = _secondsAgo;
-        secondsAgos[1] = 0;
-
-        (int56[] memory tickCumulatives, ) = IUniswapV3Pool(pool).observe(
-            secondsAgos
-        );
-
-        int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
-
-        int24 tick = int24(tickCumulativesDelta / int56(int32(_secondsAgo)));
-        // Always round to negative infinity
-        if (
-            tickCumulativesDelta < 0 &&
-            (tickCumulativesDelta % int56(int32(_secondsAgo)) != 0)
-        ) {
-            tick--;
-        }
-
-        amountOut = OracleLibrary.getQuoteAtTick(
-            tick,
-            _amountIn,
-            _tokenIn,
-            _tokenOut
-        );
-    }
-
     /* --- Pool functions --- */
 
-    /* Converts the incoming flowRate into expected outgoing flowRate of the opposite token */
-    function getOppositeFlowRate(ISuperToken tokenIn, int96 flowRate)
-        internal
+    function getFlows()
+        public
         view
-        returns (int96)
+        returns (
+            uint112 _flowIn0,
+            uint112 _flowIn1,
+            uint32 _blockTimestampLast
+        )
     {
-        /*
-        return
-            address(tokenIn) == address(token0)
-                ? (flowRate / tokenRatio)
-                : (flowRate * tokenRatio);
-        */
-
-        // TODO: calculate a global ratio in the rebalance function and use that here instead of this:
-        uint32 secondsIn = 10;
-        uint256 amountOut = estimateAmountOut(
-            getUnderlyingTokenSafe(tokenIn),
-            getUnderlyingTokenSafe(getOppositeToken(tokenIn)),
-            uint128(uint96(flowRate)),
-            secondsIn,
-            3000
-        );
-
-        return int96(int256(amountOut));
+        _flowIn0 = flowIn0;
+        _flowIn1 = flowIn1;
+        _blockTimestampLast = blockTimestampLast;
     }
 
-    /* 
-        The primary function for updating the pool
-        Should be called on every stream update / periodically by a keeper
-        
-        Serves two functions:
-            1) Update tokenRatio variable for determining stream ratio (use price oracle)
-            2) Interface with Uniswap to ensure that pool's token amounts match correct ratio
-    */
-    function rebalance() public {
-        // TODO: this is not finished / tested, do that and add rebalance function to all SF callbacks
-        // Update ratio
-        uint32 secondsIn = 10;
-        uint128 amountIn = 100000000000000000000;
-        uint256 amountOut = estimateAmountOut(
-            token0.getUnderlyingToken(),
-            token1.getUnderlyingToken(),
-            amountIn,
-            secondsIn,
-            3000
-        );
-        tokenRatio = int96(int256(amountIn / amountOut));
+    function getUserPriceCumulatives(address user)
+        external
+        view
+        returns (uint256 pc0, uint256 pc1)
+    {
+        UserPriceCumulative memory upc = userPriceCumulatives[user];
+        pc0 = upc.price0Cumulative;
+        pc1 = upc.price1Cumulative;
+    }
+
+    // update flow reserves and, on the first call per block, price accumulators
+    function _update(
+        uint112 _flowIn0,
+        uint112 _flowIn1,
+        int96 relFlow0,
+        int96 relFlow1,
+        address user
+    ) private {
+        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
+        uint32 timeElapsed = blockTimestamp - blockTimestampLast;
+        if (timeElapsed > 0 && _flowIn0 != 0 && _flowIn1 != 0) {
+            price0CumulativeLast +=
+                uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) *
+                timeElapsed;
+            price1CumulativeLast +=
+                uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) *
+                timeElapsed;
+
+            // update user's price initial price cumulative
+            // TODO: for update and termination, make sure balance is settled first
+            if (relFlow0 != 0) {
+                userPriceCumulatives[user]
+                    .price0Cumulative = price0CumulativeLast;
+            }
+            if (relFlow1 != 0) {
+                userPriceCumulatives[user]
+                    .price1Cumulative = price1CumulativeLast;
+            }
+        }
+
+        flowIn0 = uint96(relFlow0 * -1) > flowIn0
+            ? 0
+            : (
+                relFlow0 < 0
+                    ? flowIn0 - uint96(relFlow0)
+                    : flowIn0 + uint96(relFlow0)
+            );
+        flowIn1 = uint96(relFlow1 * -1) > flowIn1
+            ? 0
+            : (
+                relFlow1 < 0
+                    ? flowIn1 - uint96(relFlow1)
+                    : flowIn1 + uint96(relFlow1)
+            );
+        blockTimestampLast = blockTimestamp;
     }
 
     /* --- Superfluid callbacks --- */
@@ -226,6 +164,7 @@ contract SuperApp is SuperAppBase {
     struct Flow {
         address user;
         int96 flowRate;
+        int96 netFlowRate;
     }
 
     //onlyExpected(_agreementClass)
@@ -243,29 +182,58 @@ contract SuperApp is SuperAppBase {
             "RedirectAll: token not in pool"
         );
 
+        // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
         flow.flowRate = getFlowRate(_superToken, flow.user);
 
+        //(uint112 _flowIn0, uint112 _flowIn1,) = getFlows(); // gas savings TODO: we can optimize here by loading storage vars into stack, but we also need to avoid stack too deep errors
+
+        // rebalance
+        if (address(_superToken) == address(token0)) {
+            _update(flowIn0, flowIn1, flow.flowRate, 0, flow.user);
+        } else {
+            _update(flowIn0, flowIn1, 0, flow.flowRate, flow.user);
+        }
+
         // redirect stream of opposite token back to user and return new context
         // TODO: subtract fee from outgoing flow
-        // TODO: calculate correct ratio for new flowRate
-        // TODO: rebalance
         newCtx = cfaV1.createFlowWithCtx(
             _ctx,
             flow.user,
             getOppositeToken(_superToken),
-            getOppositeFlowRate(_superToken, flow.flowRate)
+            flow.flowRate
         );
+    }
+
+    function beforeAgreementUpdated(
+        ISuperToken _superToken,
+        address, /*agreementClass*/
+        bytes32, /*agreementId*/
+        bytes calldata, /*agreementData*/
+        bytes calldata _ctx
+    )
+        external
+        view
+        virtual
+        override
+        returns (
+            bytes memory /*cbdata*/
+        )
+    {
+        // keep track of old flowRate to calc net change in afterAgreementUpdated
+        address user = getUserFromCtx(_ctx);
+        int96 flowRate = getFlowRate(_superToken, user);
+        return abi.encodePacked(flowRate);
     }
 
     // onlyExpected(_agreementClass)
     function afterAgreementUpdated(
         ISuperToken _superToken,
-        address _agreementClass,
+        address, //_agreementClass,
         bytes32, // _agreementId,
         bytes calldata, // _agreementData,
-        bytes calldata, // _cbdata,
+        bytes calldata _cbdata,
         bytes calldata _ctx
     ) external override onlyHost returns (bytes memory newCtx) {
         require(
@@ -273,41 +241,82 @@ contract SuperApp is SuperAppBase {
                 address(_superToken) == address(token1),
             "RedirectAll: token not in pool"
         );
-        address user = getUserFromCtx(_ctx);
-        int96 flowRate = getFlowRate(_superToken, user);
+
+        // avoid stack too deep
+        Flow memory flow;
+        flow.user = getUserFromCtx(_ctx);
+        flow.flowRate = getFlowRate(_superToken, flow.user);
+        flow.netFlowRate = abi.decode(_cbdata, (int96)) - flow.flowRate;
+
+        // rebalance
+        if (address(_superToken) == address(token0)) {
+            _update(flowIn0, flowIn1, flow.netFlowRate, 0, flow.user);
+        } else {
+            _update(flowIn0, flowIn1, 0, flow.netFlowRate, flow.user);
+        }
+
+        // TODO: settle user's balance (look into how superfluid updates a stream)
 
         newCtx = cfaV1.updateFlowWithCtx(
             _ctx,
-            user,
+            flow.user,
             getOppositeToken(_superToken),
-            flowRate
+            flow.flowRate
         );
+    }
+
+    function beforeAgreementTerminated(
+        ISuperToken _superToken,
+        address, /*agreementClass*/
+        bytes32, /*agreementId*/
+        bytes calldata, /*agreementData*/
+        bytes calldata _ctx
+    )
+        external
+        view
+        virtual
+        override
+        returns (
+            bytes memory /*cbdata*/
+        )
+    {
+        // keep track of old flowRate to calc net change in afterAgreementTerminated
+        address user = getUserFromCtx(_ctx);
+        int96 flowRate = getFlowRate(_superToken, user);
+        return abi.encodePacked(flowRate);
     }
 
     function afterAgreementTerminated(
         ISuperToken _superToken,
-        address _agreementClass,
+        address, //_agreementClass,
         bytes32, // _agreementId,
         bytes calldata, // _agreementData
-        bytes calldata, // _cbdata,
+        bytes calldata _cbdata,
         bytes calldata _ctx
     ) external override onlyHost returns (bytes memory newCtx) {
-        // TODO: rebalance after stream ends
-
-        //if (!_isSameToken(_superToken) || !_isCFAv1(_agreementClass))
-        //    return _ctx;
-
         require(
             address(_superToken) == address(token0) ||
                 address(_superToken) == address(token1),
             "RedirectAll: token not in pool"
         );
-        address user = getUserFromCtx(_ctx);
+
+        // avoid stack too deep
+        Flow memory flow;
+        flow.user = getUserFromCtx(_ctx);
+        flow.flowRate = getFlowRate(_superToken, flow.user);
+        flow.netFlowRate = abi.decode(_cbdata, (int96)) - flow.flowRate;
+
+        // rebalance
+        if (address(_superToken) == address(token0)) {
+            _update(flowIn0, flowIn1, flow.netFlowRate, 0, flow.user);
+        } else {
+            _update(flowIn0, flowIn1, 0, flow.netFlowRate, flow.user);
+        }
 
         newCtx = cfaV1.deleteFlowWithCtx(
             _ctx,
             address(this),
-            user,
+            flow.user,
             getOppositeToken(_superToken)
         );
     }
