@@ -30,6 +30,11 @@ contract SuperApp is SuperAppBase {
     uint256 public price0CumulativeLast;
     uint256 public price1CumulativeLast;
 
+    enum IncomingStreamType {
+        SWAP,
+        LIQUIDITY
+    }
+
     // map user address to their starting price cumulatives
     struct UserPriceCumulative {
         uint256 price0Cumulative;
@@ -48,8 +53,7 @@ contract SuperApp is SuperAppBase {
         cfaV1 = CFAv1Library.InitData(host, cfa);
 
         uint256 configWord = SuperAppDefinitions.APP_LEVEL_FINAL |
-            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP |
-            SuperAppDefinitions.BEFORE_AGREEMENT_TERMINATED_NOOP;
+            SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP;
 
         host.registerApp(configWord);
     }
@@ -66,12 +70,24 @@ contract SuperApp is SuperAppBase {
     }
 
     /* Gets address of wallet that initiated stream (msg.sender would just point to this contract) */
+    function getParamsFromCtx(bytes calldata _ctx)
+        internal
+        view
+        returns (IncomingStreamType streamType, address user)
+    {
+        ISuperfluid.Context memory decompiledContext = _host.decodeCtx(_ctx);
+        streamType = abi.decode(
+            decompiledContext.userData,
+            (IncomingStreamType)
+        );
+        user = decompiledContext.msgSender;
+    }
+
     function getUserFromCtx(bytes calldata _ctx)
         internal
         view
-        returns (address)
+        returns (address user)
     {
-        //ISuperfluid.Context memory decompiledContext = _host.decodeCtx(_ctx);
         return _host.decodeCtx(_ctx).msgSender;
     }
 
@@ -162,6 +178,7 @@ contract SuperApp is SuperAppBase {
     /* --- Superfluid callbacks --- */
 
     struct Flow {
+        IncomingStreamType streamType;
         address user;
         int96 flowRate;
         int96 netFlowRate;
@@ -184,7 +201,13 @@ contract SuperApp is SuperAppBase {
 
         // avoid stack too deep
         Flow memory flow;
-        flow.user = getUserFromCtx(_ctx);
+        {
+            (IncomingStreamType streamType, address user) = getParamsFromCtx(
+                _ctx
+            );
+            flow.streamType = streamType;
+            flow.user = user;
+        }
         flow.flowRate = getFlowRate(_superToken, flow.user);
 
         //(uint112 _flowIn0, uint112 _flowIn1,) = getFlows(); // gas savings TODO: we can optimize here by loading storage vars into stack, but we also need to avoid stack too deep errors
@@ -244,7 +267,13 @@ contract SuperApp is SuperAppBase {
 
         // avoid stack too deep
         Flow memory flow;
-        flow.user = getUserFromCtx(_ctx);
+        {
+            (IncomingStreamType streamType, address user) = getParamsFromCtx(
+                _ctx
+            );
+            flow.streamType = streamType;
+            flow.user = user;
+        }
         flow.flowRate = getFlowRate(_superToken, flow.user);
         flow.netFlowRate = abi.decode(_cbdata, (int96)) - flow.flowRate;
 
@@ -302,7 +331,13 @@ contract SuperApp is SuperAppBase {
 
         // avoid stack too deep
         Flow memory flow;
-        flow.user = getUserFromCtx(_ctx);
+        {
+            (IncomingStreamType streamType, address user) = getParamsFromCtx(
+                _ctx
+            );
+            flow.streamType = streamType;
+            flow.user = user;
+        }
         flow.flowRate = getFlowRate(_superToken, flow.user);
         flow.netFlowRate = abi.decode(_cbdata, (int96)) - flow.flowRate;
 
