@@ -128,6 +128,17 @@ contract SuperApp is SuperAppBase {
         pc1 = upc.price1Cumulative;
     }
 
+    function getRealTimeCumulatives()
+        external
+        view
+        returns (uint256 pc0, uint256 pc1)
+    {
+        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
+        uint32 timeElapsed = blockTimestamp - blockTimestampLast;
+        pc0 = price0CumulativeLast + (uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) * timeElapsed);
+        pc1 = price1CumulativeLast + (uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) * timeElapsed);
+    }
+
     // update flow reserves and, on the first call per block, price accumulators
     function _update(
         uint112 _flowIn0,
