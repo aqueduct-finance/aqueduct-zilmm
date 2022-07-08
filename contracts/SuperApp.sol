@@ -7,8 +7,9 @@ import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/app
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "./libraries/UQ112x112.sol";
+import "./interfaces/IAqueductHost.sol";
 
-contract SuperApp is SuperAppBase {
+contract SuperApp is SuperAppBase, IAqueductHost {
     using UQ112x112 for uint224;
 
     /* --- Superfluid --- */
@@ -128,15 +129,36 @@ contract SuperApp is SuperAppBase {
         pc1 = upc.price1Cumulative;
     }
 
+    function getCumulativesAtTime(uint256 timestamp)
+        internal
+        view
+        returns (uint256 pc0, uint256 pc1)
+    {
+        uint32 timestamp32 = uint32(timestamp % 2**32);
+        uint32 timeElapsed = timestamp32 - blockTimestampLast;
+        pc0 = price0CumulativeLast + (uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) * timeElapsed);
+        pc1 = price1CumulativeLast + (uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) * timeElapsed);
+    }
+
     function getRealTimeCumulatives()
         external
         view
         returns (uint256 pc0, uint256 pc1)
     {
-        uint32 blockTimestamp = uint32(block.timestamp % 2**32);
-        uint32 timeElapsed = blockTimestamp - blockTimestampLast;
-        pc0 = price0CumulativeLast + (uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) * timeElapsed);
-        pc1 = price1CumulativeLast + (uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) * timeElapsed);
+        (pc0, pc1) = getCumulativesAtTime(block.timestamp);
+    }
+
+    function getUserCumulativeDelta(address token, address user, uint256 timestamp) external view returns (uint256 cumulativeDelta) {
+        if (token == address(token0)) {
+            (uint256 S, ) = getCumulativesAtTime(timestamp);
+            uint256 S0 = userPriceCumulatives[user].price0Cumulative;
+            cumulativeDelta = S - S0;
+        }
+        if (token == address(token1)) {
+            (uint256 S, ) = getCumulativesAtTime(timestamp);
+            uint256 S0 = userPriceCumulatives[user].price1Cumulative;
+            cumulativeDelta = S - S0;
+        }
     }
 
     // update flow reserves and, on the first call per block, price accumulators
