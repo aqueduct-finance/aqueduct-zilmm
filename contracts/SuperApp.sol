@@ -21,6 +21,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     ISuperfluid _host;
 
     /* --- Pool variables --- */
+    address public factory;
     ISuperToken public token0;
     ISuperToken public token1;
 
@@ -47,8 +48,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         assert(address(host) != address(0));
 
         _host = host;
-        token0 = ISuperToken(0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f); // fDAIx address (mumbai) // TODO: set these using init function from a factory contract
-        token1 = ISuperToken(0x96B82B65ACF7072eFEb00502F45757F254c2a0D4); // MATICx address (mumbai)
+        factory = msg.sender;
+        //token0 = ISuperToken(0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f); // fDAIx address (mumbai) // TODO: set these using init function from a factory contract
+        //token1 = ISuperToken(0x96B82B65ACF7072eFEb00502F45757F254c2a0D4); // MATICx address (mumbai)
 
         cfa = IConstantFlowAgreementV1(address(host.getAgreementClass(CFA_ID)));
         cfaV1 = CFAv1Library.InitData(host, cfa);
@@ -57,6 +59,15 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP;
 
         host.registerApp(configWord);
+    }
+
+    // called once by the factory at time of deployment
+    function initialize(ISuperToken _token0, ISuperToken _token1, uint112 in0, uint112 in1) external {
+        require(msg.sender == factory, "FORBIDDEN"); // sufficient check
+        token0 = _token0;
+        token1 = _token1;
+        flowIn0 = in0;
+        flowIn1 = in1;
     }
 
     /* --- Helper functions --- */
@@ -135,9 +146,16 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         returns (uint256 pc0, uint256 pc1)
     {
         uint32 timestamp32 = uint32(timestamp % 2**32);
-        uint32 timeElapsed = timestamp32 - blockTimestampLast;
-        pc0 = price0CumulativeLast + (uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) * timeElapsed);
-        pc1 = price1CumulativeLast + (uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) * timeElapsed);
+        uint32 timeElapsed = timestamp32 - blockTimestampLast + 100;
+        uint112 _flowIn0 = flowIn0;
+        uint112 _flowIn1 = flowIn1;
+
+        pc0 = price0CumulativeLast;
+        pc1 = price1CumulativeLast;
+        if (_flowIn0 > 0 && _flowIn1 > 0) {
+            pc0 += (uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) * timeElapsed);
+            pc1 += (uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) * timeElapsed);
+        }
     }
 
     function getRealTimeCumulatives()
@@ -148,17 +166,29 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         (pc0, pc1) = getCumulativesAtTime(block.timestamp);
     }
 
-    function getUserCumulativeDelta(address token, address user, uint256 timestamp) external view returns (uint256 cumulativeDelta) {
+    function getUserCumulativeDelta(
+        address token,
+        address user,
+        uint256 timestamp
+    ) public view returns (uint256 cumulativeDelta) {
         if (token == address(token0)) {
             (uint256 S, ) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price0Cumulative;
-            cumulativeDelta = S - S0;
+            cumulativeDelta = UQ112x112.decode(S - S0);
         }
         if (token == address(token1)) {
-            (uint256 S, ) = getCumulativesAtTime(timestamp);
+            (, uint256 S) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price1Cumulative;
-            cumulativeDelta = S - S0;
+            cumulativeDelta = UQ112x112.decode(S - S0);
         }
+    }
+
+    function getRealTimeUserCumulativeDelta(address token, address user)
+        external
+        view
+        returns (uint256 cumulativeDelta)
+    {
+        cumulativeDelta = getUserCumulativeDelta(token, user, block.timestamp);
     }
 
     // update flow reserves and, on the first call per block, price accumulators
@@ -171,40 +201,39 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     ) private {
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast;
-        if (timeElapsed > 0 && _flowIn0 != 0 && _flowIn1 != 0) {
+
+        flowIn0 = relFlow0 < 0
+                    ? flowIn0 - uint96(relFlow0)
+                    : flowIn0 + uint96(relFlow0);
+
+        flowIn1 = relFlow1 < 0
+                    ? flowIn1 - uint96(relFlow1)
+                    : flowIn1 + uint96(relFlow1);
+
+        if (flowIn0 != 0 && flowIn1 != 0) {
+            if (timeElapsed <= 0) {
+                timeElapsed = 1;
+            }
+
             price0CumulativeLast +=
-                uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) *
+                uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) *
                 timeElapsed;
             price1CumulativeLast +=
-                uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) *
+                uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) *
                 timeElapsed;
 
             // update user's price initial price cumulative
             // TODO: for update and termination, make sure balance is settled first
             if (relFlow0 != 0) {
                 userPriceCumulatives[user]
-                    .price0Cumulative = price0CumulativeLast;
+                    .price1Cumulative = price1CumulativeLast;
             }
             if (relFlow1 != 0) {
                 userPriceCumulatives[user]
-                    .price1Cumulative = price1CumulativeLast;
+                    .price0Cumulative = price0CumulativeLast;
             }
         }
 
-        flowIn0 = uint96(relFlow0 * -1) > flowIn0
-            ? 0
-            : (
-                relFlow0 < 0
-                    ? flowIn0 - uint96(relFlow0)
-                    : flowIn0 + uint96(relFlow0)
-            );
-        flowIn1 = uint96(relFlow1 * -1) > flowIn1
-            ? 0
-            : (
-                relFlow1 < 0
-                    ? flowIn1 - uint96(relFlow1)
-                    : flowIn1 + uint96(relFlow1)
-            );
         blockTimestampLast = blockTimestamp;
     }
 
@@ -235,11 +264,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         {
+            /*
             (IncomingStreamType streamType, address user) = getParamsFromCtx(
                 _ctx
             );
             flow.streamType = streamType;
-            flow.user = user;
+            */
+
+            flow.user = getUserFromCtx(_ctx);
         }
         flow.flowRate = getFlowRate(_superToken, flow.user);
 
@@ -260,6 +292,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             getOppositeToken(_superToken),
             flow.flowRate
         );
+        //newCtx = _ctx;
     }
 
     function beforeAgreementUpdated(
