@@ -146,7 +146,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         returns (uint256 pc0, uint256 pc1)
     {
         uint32 timestamp32 = uint32(timestamp % 2**32);
-        uint32 timeElapsed = timestamp32 - blockTimestampLast + 100;
+        uint32 timeElapsed = timestamp32 - blockTimestampLast;
         uint112 _flowIn0 = flowIn0;
         uint112 _flowIn1 = flowIn1;
 
@@ -202,17 +202,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast;
 
-        flowIn0 = relFlow0 < 0
-                    ? flowIn0 - uint96(relFlow0)
-                    : flowIn0 + uint96(relFlow0);
-
-        flowIn1 = relFlow1 < 0
-                    ? flowIn1 - uint96(relFlow1)
-                    : flowIn1 + uint96(relFlow1);
-
         if (flowIn0 != 0 && flowIn1 != 0) {
             if (timeElapsed <= 0) {
-                timeElapsed = 1;
+                timeElapsed = 0;
             }
 
             price0CumulativeLast +=
@@ -233,6 +225,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                     .price0Cumulative = price0CumulativeLast;
             }
         }
+
+        flowIn0 = relFlow0 < 0
+                    ? flowIn0 - uint96(relFlow0)
+                    : flowIn0 + uint96(relFlow0);
+
+        flowIn1 = relFlow1 < 0
+                    ? flowIn1 - uint96(relFlow1)
+                    : flowIn1 + uint96(relFlow1);
 
         blockTimestampLast = blockTimestamp;
     }

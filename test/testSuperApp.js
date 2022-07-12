@@ -39,7 +39,22 @@ describe("SuperApp Tests", function () {
     let addr1Signer;
 
     // delay helper function
-    const delay = ms => new Promise(res => setTimeout(res, ms));
+    const delay = async (seconds) => {
+        await hre.ethers.provider.send('evm_increaseTime', [seconds]);
+        await hre.ethers.provider.send("evm_mine");
+    };
+
+    const getSumOfAllBalances = async () => {
+        const a = (await token0.balanceOf(testWalletAddress)) / 10**18;
+        const b = (await token1.balanceOf(testWalletAddress)) / 10**18;
+        const c = (await token0.balanceOf(superApp.address)) / 10**18;
+        const d = (await token1.balanceOf(superApp.address)) / 10**18;
+        const e = (await token0.balanceOf(addr1.address)) / 10**18;
+        const f = (await token1.balanceOf(addr1.address)) / 10**18;
+
+        return (a + b + c + d + e + f);
+        //return a;
+    }
 
     // runs before every test
     beforeEach(async function () {
@@ -69,7 +84,8 @@ describe("SuperApp Tests", function () {
         await token1.initialize(daiAddress, 18, "Aqueduct Token 2", "AQUA2");
 
         // init pool
-        await superApp.initialize(token0.address, token1.address, 100000000000, 100000000000);
+        //await superApp.initialize(token0.address, token1.address, 100000000000, 100000000000);
+        await superApp.initialize(token0.address, token1.address, 0, 0);
 
         // init superfluid sdk
         sf = await Framework.create({
@@ -119,10 +135,6 @@ describe("SuperApp Tests", function () {
             const txnResponse = await createFlowOperation.exec(signer);
             await txnResponse.wait();
 
-            // test cumulatives
-            //console.log("User's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, testWalletAddress));
-            //console.log("User's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, testWalletAddress));
-
             // create flow of token1 into the Super App
             const createFlowOperation2 = sf.cfaV1.createFlow({
                 sender: testWalletAddress,
@@ -133,59 +145,52 @@ describe("SuperApp Tests", function () {
             const txnResponse2 = await createFlowOperation2.exec(signer);
             await txnResponse2.wait();
 
-            console.log("Flows: " + await superApp.getFlows());
+            //console.log("Flows: " + await superApp.getFlows());
 
-            // test cumulatives
-            //console.log("User's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, testWalletAddress));
-            //console.log("User's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, testWalletAddress));
-
-            // check that LP's balance stays the same now
-            /*
-            console.log("User's token1 balance: " + (await token1.balanceOf(testWalletAddress) / 10**18));
-            await delay(5000);
-            console.log("User's token1 balance: " + (await token1.balanceOf(testWalletAddress) / 10**18));
-            await delay(5000);
-            console.log("User's token1 balance: " + (await token1.balanceOf(testWalletAddress) / 10**18));
-            */
+            // check that differences between all balances stay net 0
+            console.log("All balances: " + await getSumOfAllBalances())
+            await delay(5);
+            console.log("All balances: " + await getSumOfAllBalances())
+            await delay(360000000);
+            console.log("All balances: " + await getSumOfAllBalances())
 
             // perform one way swap with second test wallet
             await token0.connect(testWalletSigner).transfer(addr1.address, amnt2); // transfer some tokens to addr1
+            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
             const createFlowOperation3 = sf.cfaV1.createFlow({
                 sender: addr1.address,
                 receiver: superApp.address,
                 superToken: token0.address,
-                flowRate: "100000000000"
+                flowRate: "10000000"
             });
             const txnResponse3 = await createFlowOperation3.exec(addr1Signer);
             await txnResponse3.wait();
 
+            // check that differences between all balances stay net 0
+            console.log("All balances: " + await getSumOfAllBalances())
+            await delay(5);
+            console.log("All balances: " + await getSumOfAllBalances())
+            await delay(36000);
+            console.log("All balances: " + await getSumOfAllBalances())
+
             // check addr1 balance of input token
-            /*
-            console.log("User2's token0 balance: " + await token0.balanceOf(addr1.address));
-            await delay(5000);
-            console.log("User2's token0 balance: " + await token0.balanceOf(addr1.address));
-            await delay(5000);
-            console.log("User2's token0 balance: " + await token0.balanceOf(addr1.address));
-            */
+            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
+            console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
+            await delay(5);
+            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
+            console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
+            await delay(36000);
+            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
+            console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
 
             // test cumulatives
-            console.log("User2's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address));
-            console.log("User2's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
-            await delay(15000);
-            console.log("User2's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address));
-            console.log("User2's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
-
-            // check addr1 balance of opposite token
             /*
-            console.log("User2's token1 balance: " + await token1.balanceOf(addr1.address));
-            await delay(5000);
-            console.log("User2's token1 balance: " + await token1.balanceOf(addr1.address));
-            await delay(5000);
-            console.log("User2's token1 balance: " + await token1.balanceOf(addr1.address));
+            console.log("User2's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address));
+            console.log("User2's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
+            await delay(60)
+            console.log("User2's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address));
+            console.log("User2's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
             */
-
-            // 'fast-forward' time:
-            // https://ethereum.stackexchange.com/questions/106288/how-to-write-tests-for-time-based-contracts
         })
     })
 })

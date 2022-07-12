@@ -82,66 +82,56 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
             account
         );
         for (uint256 i = 0; i < activeAgreements.length; i++) {
-            // ignore regular CFA / IDA for now
-            // TODO: find better way to differentiate between pool streams and regular CFA - apply custom logic
-            /*
-            (
-                int256 agreementDynamicBalance,
-                uint256 agreementDeposit,
-                uint256 agreementOwedDeposit) = activeAgreements[i]
-                    .realtimeBalanceOf(
-                         this,
-                         account,
-                         timestamp
-                     );
-            */
-
             // init vars
             int256 agreementDynamicBalance;
             uint256 agreementDeposit;
             uint256 agreementOwedDeposit;
             int96 flowRate;
+            uint256 initialTimestamp;
 
-            // get stream from pool contract (params: token, sender, receiver)
-            /*(
-                ,
-                flowRate,
-                agreementDeposit,
-                agreementOwedDeposit
-            ) = IConstantFlowAgreementV1(address(activeAgreements[i])).getFlow(
-                this,
-                address(_aqueductHost),
-                account
-            );*/
             (
-                ,
-                flowRate,
+                agreementDynamicBalance,
                 agreementDeposit,
                 agreementOwedDeposit
-            ) = IConstantFlowAgreementV1(address(_host.getAgreementClass(keccak256("org.superfluid-finance.agreements.ConstantFlowAgreement.v1")))).getFlow(
-                this,
-                address(_aqueductHost),
-                account
-            );
+            ) = activeAgreements[i].realtimeBalanceOf(this, account, timestamp);
 
-            // if flowRate is 0, assume regular CFA
-            if (flowRate == 0) {
+            if (account == address(_aqueductHost)) {
+                
+            } else {
+                // get stream from pool contract (params: token, sender, receiver)
                 (
-                    agreementDynamicBalance,
+                    initialTimestamp,
+                    flowRate,
                     agreementDeposit,
                     agreementOwedDeposit
-                ) = activeAgreements[i].realtimeBalanceOf(
-                    this,
-                    account,
-                    timestamp
-                );
-            } else {
-                uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(
-                    address(this),
-                    account,
-                    timestamp
-                );
-                agreementDynamicBalance = int256(flowRate) * int256(cumulativeDelta);
+                ) = IConstantFlowAgreementV1(
+                    address(
+                        _host.getAgreementClass(
+                            keccak256(
+                                "org.superfluid-finance.agreements.ConstantFlowAgreement.v1"
+                            )
+                        )
+                    )
+                ).getFlow(this, address(_aqueductHost), account);
+
+                // apply custom logic if aqueductHost is streaming to this address
+                if (flowRate != 0) {
+                    // negate the regular stream
+                    agreementDynamicBalance -=
+                        int256(flowRate) *
+                        (timestamp - initialTimestamp).toInt256();
+
+                    // update with custom TWAP balance calculation
+                    uint256 cumulativeDelta = _aqueductHost
+                        .getUserCumulativeDelta(
+                            address(this),
+                            account,
+                            timestamp
+                        );
+                    agreementDynamicBalance +=
+                        int256(flowRate) *
+                        int256(cumulativeDelta);
+                }
             }
 
             deposit = deposit + agreementDeposit;
