@@ -39,6 +39,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     // map user address to their starting price cumulatives
     struct UserPriceCumulative {
+        int96 netFlowRate0;
+        int96 netFlowRate1;
         uint256 price0Cumulative;
         uint256 price1Cumulative;
     }
@@ -62,7 +64,12 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     }
 
     // called once by the factory at time of deployment
-    function initialize(ISuperToken _token0, ISuperToken _token1, uint112 in0, uint112 in1) external {
+    function initialize(
+        ISuperToken _token0,
+        ISuperToken _token1,
+        uint112 in0,
+        uint112 in1
+    ) external {
         require(msg.sender == factory, "FORBIDDEN"); // sufficient check
         token0 = _token0;
         token1 = _token1;
@@ -153,8 +160,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         pc0 = price0CumulativeLast;
         pc1 = price1CumulativeLast;
         if (_flowIn0 > 0 && _flowIn1 > 0) {
-            pc0 += (uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) * timeElapsed);
-            pc1 += (uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) * timeElapsed);
+            pc0 += (uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) *
+                timeElapsed);
+            pc1 += (uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) *
+                timeElapsed);
         }
     }
 
@@ -175,8 +184,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             (uint256 S, ) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price0Cumulative;
             cumulativeDelta = UQ112x112.decode(S - S0);
-        }
-        if (token == address(token1)) {
+        } else if (token == address(token1)) {
             (, uint256 S) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price1Cumulative;
             cumulativeDelta = UQ112x112.decode(S - S0);
@@ -189,6 +197,18 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         returns (uint256 cumulativeDelta)
     {
         cumulativeDelta = getUserCumulativeDelta(token, user, block.timestamp);
+    }
+
+    function getTwapNetFlowRate(address token, address user)
+        external
+        view
+        returns (int96 netFlowRate)
+    {
+        if (token == address(token0)) {
+            netFlowRate = userPriceCumulatives[user].netFlowRate0;
+        } else if (token == address(token1)) {
+            netFlowRate = userPriceCumulatives[user].netFlowRate1;
+        }
     }
 
     // update flow reserves and, on the first call per block, price accumulators
@@ -219,20 +239,24 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             if (relFlow0 != 0) {
                 userPriceCumulatives[user]
                     .price1Cumulative = price1CumulativeLast;
+                userPriceCumulatives[user].netFlowRate1 += relFlow0;
+                userPriceCumulatives[address(this)].netFlowRate1 -= relFlow0;
             }
             if (relFlow1 != 0) {
                 userPriceCumulatives[user]
                     .price0Cumulative = price0CumulativeLast;
+                userPriceCumulatives[user].netFlowRate0 += relFlow1;
+                userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
             }
         }
 
         flowIn0 = relFlow0 < 0
-                    ? flowIn0 - uint96(relFlow0)
-                    : flowIn0 + uint96(relFlow0);
+            ? flowIn0 - uint96(relFlow0)
+            : flowIn0 + uint96(relFlow0);
 
         flowIn1 = relFlow1 < 0
-                    ? flowIn1 - uint96(relFlow1)
-                    : flowIn1 + uint96(relFlow1);
+            ? flowIn1 - uint96(relFlow1)
+            : flowIn1 + uint96(relFlow1);
 
         blockTimestampLast = blockTimestamp;
     }
