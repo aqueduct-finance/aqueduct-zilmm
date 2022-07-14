@@ -51,8 +51,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
         _host = host;
         factory = msg.sender;
-        //token0 = ISuperToken(0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f); // fDAIx address (mumbai) // TODO: set these using init function from a factory contract
-        //token1 = ISuperToken(0x96B82B65ACF7072eFEb00502F45757F254c2a0D4); // MATICx address (mumbai)
 
         cfa = IConstantFlowAgreementV1(address(host.getAgreementClass(CFA_ID)));
         cfaV1 = CFAv1Library.InitData(host, cfa);
@@ -235,7 +233,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 timeElapsed;
 
             // update user's price initial price cumulative
-            // TODO: for update and termination, make sure balance is settled first
             if (relFlow0 != 0) {
                 userPriceCumulatives[user]
                     .price1Cumulative = price1CumulativeLast;
@@ -365,7 +362,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             flow.user = user;
         }
         flow.flowRate = getFlowRate(_superToken, flow.user);
-        flow.netFlowRate = abi.decode(_cbdata, (int96)) - flow.flowRate;
+        flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
 
         // rebalance
         if (address(_superToken) == address(token0)) {
@@ -373,8 +370,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         } else {
             _update(flowIn0, flowIn1, 0, flow.netFlowRate, flow.user);
         }
-
-        // TODO: settle user's balance (look into how superfluid updates a stream)
 
         newCtx = cfaV1.updateFlowWithCtx(
             _ctx,
@@ -405,6 +400,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         return abi.encodePacked(flowRate);
     }
 
+    event reportNum(int96 rate);
+
     function afterAgreementTerminated(
         ISuperToken _superToken,
         address, //_agreementClass,
@@ -419,6 +416,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             "RedirectAll: token not in pool"
         );
 
+        require(1 == 2, 'nice');
+
         // avoid stack too deep
         Flow memory flow;
         {
@@ -429,7 +428,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             flow.user = user;
         }
         flow.flowRate = getFlowRate(_superToken, flow.user);
-        flow.netFlowRate = abi.decode(_cbdata, (int96)) - flow.flowRate;
+        flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
+
+        emit reportNum(flow.netFlowRate);
 
         // rebalance
         if (address(_superToken) == address(token0)) {
