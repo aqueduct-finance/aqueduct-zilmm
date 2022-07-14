@@ -263,30 +263,29 @@ const main = async () => {
     await superApp.initialize(token0.address, token1.address, 0, 0);
 
     // UPGRADE TOKENS
-    // const amount = "100000000000000000000"; // 100
     const amount = "100000000000000000";
 
     // APPROVE TOKEN0
     const token0Approve = await fdaiContract.approve(token0.address, amount, {
-        gasLimit: 100000,
+        gasLimit: 500000,
     });
     await token0Approve.wait();
     console.log("token0 spend approved");
 
     // UPGRADE TOKEN0
-    const token0Upgrade = await token0.upgrade(amount, { gasLimit: 100000 });
+    const token0Upgrade = await token0.upgrade(amount, { gasLimit: 500000 });
     await token0Upgrade.wait();
     console.log("Upgraded token0 tokens");
 
     // APPROVE TOKEN1
     const token1Approve = await fdaiContract.approve(token1.address, amount, {
-        gasLimit: 100000,
+        gasLimit: 500000,
     });
     await token1Approve.wait();
     console.log("token1 spend approved");
 
     // UPGRADE TOKEN1
-    const token1Upgrade = await token1.upgrade(amount, { gasLimit: 100000 });
+    const token1Upgrade = await token1.upgrade(amount, { gasLimit: 500000 });
     await token1Upgrade.wait();
     console.log("Upgraded token1 tokens");
 };

@@ -6,10 +6,9 @@ const { superAppAddress } = require("./../../superAppAddress.js");
 const { token0Address } = require("./../../token0Address.js");
 const { token1Address } = require("./../../token1Address.js");
 
-const main = async () => {
-    const provider = ethers.provider;
-    const signer = provider.getSigner();
+const LP_ADDRESS = "0x888D08001F91D0eEc2f16364779697462A9A713D"; // swap this for your own address
 
+const main = async () => {
     // GET CONTRACTS
     const superApp = await hre.ethers.getContractAt(
         "SuperApp",
@@ -20,42 +19,51 @@ const main = async () => {
         token0Address
     );
     const token1 = await hre.ethers.getContractAt(
-        "TestToken", // The name of the fDAI token contract from etherscan
+        "AqueductToken",
         token1Address
     );
 
     // INITIALIZE SUPERFLUID SDK
+    const provider = ethers.provider;
     const superfluid = await Framework.create({
         chainId: 4,
         provider: provider,
     });
+    console.log("Superfluid initialized");
 
-    // const signer = superfluid.createSigner({
-    //     privateKey: process.env.PRIVATE_KEY,
-    //     provider: ethers.provider,
-    // });
-
-    // create flow of token0 into the Super App
-    const DEV4 = "0x92C6D258907aF51F40DDE64E8476014B2dC8CAe9";
-    const createFlowOperation = superfluid.cfaV1.createFlow({
-        sender: DEV4, // TODO: Add my address and make sure it work
-        receiver: superApp.address,
-        superToken: token0.address,
-        flowRate: "1000000000",
+    const signer = superfluid.createSigner({
+        privateKey: process.env.PRIVATE_KEY,
+        provider: provider,
     });
-    const txnResponse = await createFlowOperation.exec(signer);
+    console.log("Signer: ", signer.address);
+
+    // TODO: failing here - Error: cannot estimate gas; transaction may fail or may require manual gas limit
+    // create flow of token0 into the Super App
+    const createFlowOperation = superfluid.cfaV1.createFlow(
+        {
+            sender: LP_ADDRESS,
+            receiver: superApp.address,
+            superToken: token0.address,
+            flowRate: "1000000000",
+        },
+        { gasLimit: 500000 }
+    );
+    const txnResponse = await createFlowOperation.exec(signer, {
+        gasLimit: 500000,
+    });
     await txnResponse.wait();
     console.log("token0 stream created");
 
     // create flow of token1 into the Super App
-    const DEV3 = "0xF918CB48A11AF9C740407843c2218D8e00E52875";
     const createFlowOperation2 = superfluid.cfaV1.createFlow({
-        sender: DEV3, // TODO: Add another of my addresses and make sure it works
+        sender: LP_ADDRESS,
         receiver: superApp.address,
         superToken: token1.address,
         flowRate: "1000000000",
     });
-    const txnResponse2 = await createFlowOperation2.exec(signer);
+    const txnResponse2 = await createFlowOperation2.exec(signer, {
+        gasLimit: 500000,
+    });
     await txnResponse2.wait();
     console.log("token1 stream created");
 };
