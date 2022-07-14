@@ -161,6 +161,14 @@ describe("SuperApp Tests", function () {
             await delay(360000000);
             console.log("All balances: " + await getSumOfAllBalances())
 
+            // all
+            console.log('tw0 ' + (await token0.balanceOf(testWalletAddress)) / 10**18 );
+            console.log('tw1 ' + (await token1.balanceOf(testWalletAddress)) / 10**18);
+            console.log('sa0 ' + (await token0.balanceOf(superApp.address)) / 10**18);
+            console.log('sa1 ' + (await token1.balanceOf(superApp.address)) / 10**18);
+            console.log('ad0 ' + (await token0.balanceOf(addr1.address)) / 10**18);
+            console.log('ad1 ' + (await token1.balanceOf(addr1.address)) / 10**18);
+
             // perform one way swap with second test wallet
             await token0.connect(testWalletSigner).transfer(addr1.address, amnt2); // transfer some tokens to addr1
             console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
@@ -190,7 +198,9 @@ describe("SuperApp Tests", function () {
             console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
             console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
 
-            /*
+            console.log('token0 flowrate: ' + await superApp.getTwapNetFlowRate(token0.address, addr1.address));
+            console.log('token1 flowrate: ' + await superApp.getTwapNetFlowRate(token1.address, addr1.address));
+
             // cancel flows
             const deleteFlowOperation3 = sf.cfaV1.deleteFlow({
                 sender: addr1.address,
@@ -198,14 +208,15 @@ describe("SuperApp Tests", function () {
                 superToken: token0.address
             });
             const txnResponse4 = await deleteFlowOperation3.exec(addr1Signer);
-            await txnResponse4.wait();
+            const res4 = await txnResponse4.wait();
+            console.log(res4.events)
+            console.log(txnResponse4.events)
 
             await delay(36000);
             console.log("All balances: " + await getSumOfAllBalances())
 
             console.log('token0 flowrate: ' + await superApp.getTwapNetFlowRate(token0.address, addr1.address));
             console.log('token1 flowrate: ' + await superApp.getTwapNetFlowRate(token1.address, addr1.address));
-            */
 
 
             //await delay(360000);
