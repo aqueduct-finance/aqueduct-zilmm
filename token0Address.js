@@ -1,0 +1,1 @@
+exports.token0Address = "0x46C05c0051EcCbAa1742F6dE4Ca0F3485dA44894"
