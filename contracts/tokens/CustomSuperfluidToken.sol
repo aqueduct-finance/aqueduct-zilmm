@@ -66,34 +66,6 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
      * Real-time balance functions
      *************************************************************************/
 
-    // LEFT OFF HERE
-    /*
-    function getDeposits(address account, uint256 timestamp)
-        public
-        view
-        override
-        returns (
-            uint256 deposit,
-            uint256 owedDeposit
-        )
-    {
-        ISuperAgreement[] memory activeAgreements = getAccountActiveAgreements(
-            account
-        );
-        for (uint256 i = 0; i < activeAgreements.length; i++) {
-            // get regular balance
-            (
-                int256 agreementDynamicBalance,
-                uint256 agreementDeposit,
-                uint256 agreementOwedDeposit
-            ) = activeAgreements[i].realtimeBalanceOf(this, account, timestamp);
-
-            deposit += agreementDeposit;
-            owedDeposit += agreementOwedDeposit;
-        }
-    }
-    */
-
     /// @dev ISuperfluidToken.realtimeBalanceOf implementation
     function realtimeBalanceOf(address account, uint256 timestamp)
         public

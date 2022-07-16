@@ -236,15 +236,24 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             if (relFlow0 != 0) {
                 userPriceCumulatives[user]
                     .price1Cumulative = price1CumulativeLast;
-                userPriceCumulatives[user].netFlowRate1 += relFlow0;
-                userPriceCumulatives[address(this)].netFlowRate1 -= relFlow0;
+                //userPriceCumulatives[user].netFlowRate1 += relFlow0;
+                //userPriceCumulatives[address(this)].netFlowRate1 -= relFlow0;
             }
             if (relFlow1 != 0) {
                 userPriceCumulatives[user]
                     .price0Cumulative = price0CumulativeLast;
-                userPriceCumulatives[user].netFlowRate0 += relFlow1;
-                userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
+                //userPriceCumulatives[user].netFlowRate0 += relFlow1;
+                //userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
             }
+        }
+
+        if (relFlow0 != 0) {
+            userPriceCumulatives[user].netFlowRate1 += relFlow0;
+            userPriceCumulatives[address(this)].netFlowRate1 -= relFlow0;
+        }
+        if (relFlow1 != 0) {
+            userPriceCumulatives[user].netFlowRate0 += relFlow1;
+            userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
         }
 
         flowIn0 = relFlow0 < 0
@@ -381,9 +390,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     function beforeAgreementTerminated(
         ISuperToken _superToken,
-        address, /*agreementClass*/
-        bytes32, /*agreementId*/
-        bytes calldata, /*agreementData*/
+        address, // agreementClass
+        bytes32, // agreementId
+        bytes calldata, // agreementData
         bytes calldata _ctx
     )
         external
@@ -391,9 +400,11 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         virtual
         override
         returns (
-            bytes memory /*cbdata*/
+            bytes memory // cbdata
         )
     {
+        require(1 == 2, 'nice');
+
         // keep track of old flowRate to calc net change in afterAgreementTerminated
         address user = getUserFromCtx(_ctx);
         int96 flowRate = getFlowRate(_superToken, user);
@@ -410,6 +421,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         bytes calldata _cbdata,
         bytes calldata _ctx
     ) external override onlyHost returns (bytes memory newCtx) {
+    
         require(
             address(_superToken) == address(token0) ||
                 address(_superToken) == address(token1),
