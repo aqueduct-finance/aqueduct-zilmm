@@ -158,9 +158,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         pc0 = price0CumulativeLast;
         pc1 = price1CumulativeLast;
         if (_flowIn0 > 0 && _flowIn1 > 0) {
-            pc0 += (uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) *
+            pc1 += (uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) *
                 timeElapsed);
-            pc1 += (uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) *
+            pc0 += (uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) *
                 timeElapsed);
         }
     }
@@ -225,10 +225,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 timeElapsed = 0;
             }
 
-            price0CumulativeLast +=
+            price1CumulativeLast +=
                 uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) *
                 timeElapsed;
-            price1CumulativeLast +=
+            price0CumulativeLast +=
                 uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) *
                 timeElapsed;
 
@@ -236,14 +236,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             if (relFlow0 != 0) {
                 userPriceCumulatives[user]
                     .price1Cumulative = price1CumulativeLast;
-                //userPriceCumulatives[user].netFlowRate1 += relFlow0;
-                //userPriceCumulatives[address(this)].netFlowRate1 -= relFlow0;
+                userPriceCumulatives[address(this)]
+                    .price1Cumulative = price1CumulativeLast;
             }
             if (relFlow1 != 0) {
                 userPriceCumulatives[user]
                     .price0Cumulative = price0CumulativeLast;
-                //userPriceCumulatives[user].netFlowRate0 += relFlow1;
-                //userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
+                userPriceCumulatives[address(this)]
+                    .price0Cumulative = price0CumulativeLast;
             }
         }
 

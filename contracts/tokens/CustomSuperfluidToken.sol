@@ -89,36 +89,40 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                 uint256 agreementOwedDeposit
             ) = activeAgreements[i].realtimeBalanceOf(this, account, timestamp);
 
-            // get account's flow timestamp
-            (uint256 initialTimestamp, , , ) = IConstantFlowAgreementV1(
-                address(
-                    _host.getAgreementClass(
-                        keccak256(
-                            "org.superfluid-finance.agreements.ConstantFlowAgreement.v1"
+            // only apply custom functionality for CFA
+            // TODO: find a way to check if activeAgreements[i] is CFA (the code below assumes that activeAgreements[0] is CFA)
+            if (i == 0) {
+                // get account's flow timestamp
+                (uint256 initialTimestamp, , , ) = IConstantFlowAgreementV1(
+                    address(
+                        _host.getAgreementClass(
+                            keccak256(
+                                "org.superfluid-finance.agreements.ConstantFlowAgreement.v1"
+                            )
                         )
                     )
-                )
-            ).getAccountFlowInfo(this, account);
+                ).getAccountFlowInfo(this, account);
 
-            // get TWAP net flow
-            int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
-                address(this),
-                account
-            );
-            uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(
-                address(this),
-                account,
-                timestamp
-            );
+                // get TWAP net flow
+                int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
+                    address(this),
+                    account
+                );
+                uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(
+                    address(this),
+                    account,
+                    timestamp
+                );
 
-            // modify balance to include TWAP streams
-            agreementDynamicBalance -=
-                int256(twapNetFlowRate) *
-                (timestamp - initialTimestamp).toInt256();
+                // modify balance to include TWAP streams
+                agreementDynamicBalance -=
+                    int256(twapNetFlowRate) *
+                    (timestamp - initialTimestamp).toInt256();
 
-            agreementDynamicBalance +=
-                int256(twapNetFlowRate) *
-                int256(cumulativeDelta);
+                agreementDynamicBalance +=
+                    int256(twapNetFlowRate) *
+                    int256(cumulativeDelta);
+            }
 
             deposit = deposit + agreementDeposit;
             owedDeposit = owedDeposit + agreementOwedDeposit;
