@@ -120,8 +120,8 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                     (timestamp - initialTimestamp).toInt256();
 
                 agreementDynamicBalance +=
-                    int256(twapNetFlowRate) *
-                    int256(cumulativeDelta);
+                    (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
+                    2**112;
             }
 
             deposit = deposit + agreementDeposit;
@@ -421,8 +421,8 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                         (timestamp - initialTimestamp).toInt256();
 
                     agreementDynamicBalance +=
-                        int256(twapNetFlowRate) *
-                        int256(cumulativeDelta);
+                        (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
+                        2**112;
 
                     _settleBalance(account, agreementDynamicBalance);
                 } else {

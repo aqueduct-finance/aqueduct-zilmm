@@ -182,10 +182,12 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             (uint256 S, ) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price0Cumulative;
             cumulativeDelta = UQ112x112.decode(S - S0);
+            cumulativeDelta = S - S0;
         } else if (token == address(token1)) {
             (, uint256 S) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price1Cumulative;
             cumulativeDelta = UQ112x112.decode(S - S0);
+            cumulativeDelta = S - S0;
         }
     }
 

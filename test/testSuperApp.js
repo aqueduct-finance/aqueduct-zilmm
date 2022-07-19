@@ -169,15 +169,6 @@ describe("SuperApp Tests", function () {
             //console.log("Contract's token0 balance: " + (await token0.balanceOf(superApp.address) / 10**18));
             //console.log("Contract's token1 balance: " + (await token1.balanceOf(superApp.address) / 10**18));
 
-            // check that differences between all balances stay net 0
-            /*
-            console.log("All balances: " + await getSumOfAllBalances())
-            await delay(5);
-            console.log("All balances: " + await getSumOfAllBalances())
-            await delay(360000000);
-            console.log("All balances: " + await getSumOfAllBalances())
-            */
-
             await logInitialCumulatives();
             await logCumulatives();
             await logAllBalances();
@@ -204,17 +195,6 @@ describe("SuperApp Tests", function () {
             const txnResponse2 = await createFlowOperation2.exec(signer);
             await txnResponse2.wait();
 
-            //console.log("Flows: " + await superApp.getFlows());
-
-            // check that differences between all balances stay net 0
-            /*
-            console.log("All balances: " + await getSumOfAllBalances())
-            await delay(5);
-            console.log("All balances: " + await getSumOfAllBalances())
-            await delay(360000000);
-            console.log("All balances: " + await getSumOfAllBalances())
-            */
-
             // all
             await logInitialCumulatives();
             await logCumulatives();
@@ -234,107 +214,42 @@ describe("SuperApp Tests", function () {
                 sender: addr1.address,
                 receiver: superApp.address,
                 superToken: token0.address,
-                flowRate: "100000000000"
+                flowRate: "10000000000"
             });
             const txnResponse3 = await createFlowOperation3.exec(addr1Signer);
             await txnResponse3.wait();
 
             // all
-            await logInitialCumulatives();
-            await logCumulatives();
-            await logAllBalances();
-
-            // check that differences between all balances stay net 0
-            /*
-            console.log("All balances: " + await getSumOfAllBalances())
-            await delay(5);
-            console.log("All balances: " + await getSumOfAllBalances())
-            await delay(36000);
-            console.log("All balances: " + await getSumOfAllBalances())
-            */
-
-            await delay(36000);
-
-            // all
-            await logInitialCumulatives();
             await logCumulatives();
             await logAllBalances();
 
             await delay(36000);
 
             // all
-            await logInitialCumulatives();
             await logCumulatives();
             await logAllBalances();
 
-            // check addr1 balance of input token
-            /*
-            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
-            console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
-            await delay(5);
-            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
-            console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
-            await delay(36000);
-            console.log("User's token0 balance: " + await token0.balanceOf(addr1.address));
-            console.log("User's token1 balance: " + await token1.balanceOf(addr1.address));
-
-            console.log('token0 flowrate: ' + await superApp.getTwapNetFlowRate(token0.address, addr1.address));
-            console.log('token1 flowrate: ' + await superApp.getTwapNetFlowRate(token1.address, addr1.address));
-            */
-
-            // perform one way swap with second test wallet
-            /*
-            await token0.connect(testWalletSigner).transfer(addr2.address, amnt2); // transfer some tokens to addr2
-            console.log("User 2's token0 balance: " + await token0.balanceOf(addr2.address));
-            const createFlowOperation5 = sf.cfaV1.createFlow({
+            // perform one way swap in opposite direction with third test wallet
+            console.log('\n_____ User B token0 <-- token1 _____')
+            await token1.connect(testWalletSigner).transfer(addr2.address, amnt2); // transfer some tokens to addr1
+            const createFlowOperation4 = sf.cfaV1.createFlow({
                 sender: addr2.address,
                 receiver: superApp.address,
-                superToken: token0.address,
-                flowRate: "10000000"
+                superToken: token1.address,
+                flowRate: "5000000"
             });
-            const txnResponse5 = await createFlowOperation5.exec(addr2Signer);
-            await txnResponse5.wait();
-            */
+            const txnResponse4 = await createFlowOperation4.exec(addr2Signer);
+            await txnResponse4.wait();
 
-            /*
-            console.log('SF flowRate: ' + await sf.cfaV1.getNetFlow({
-                superToken: token0.address,
-                account: addr1.address,
-                providerOrSigner: addr1Signer
-              }))
+            // all
+            await logCumulatives();
+            await logAllBalances();
 
-            // cancel flows
-            const deleteFlowOperation3 = sf.cfaV1.deleteFlow({
-                sender: addr1.address,
-                receiver: superApp.address,
-                superToken: token0.address
-            });
-            const txnResponse4 = await deleteFlowOperation3.exec(addr1Signer);
-            const res4 = await txnResponse4.wait();
-            console.log(res4.events)
-            console.log(txnResponse4.events)
-            */
+            await delay(36000);
 
-            /*
-            console.log('SF flowRate: ' + await sf.cfaV1.getNetFlow({
-                superToken: token0.address,
-                account: addr1.address,
-                providerOrSigner: addr1Signer
-              }))
-            console.log('token0 flowrate: ' + await superApp.getTwapNetFlowRate(token0.address, addr1.address));
-            console.log('token1 flowrate: ' + await superApp.getTwapNetFlowRate(token1.address, addr1.address));
-            */
-
-            //await delay(360000);
-            //console.log("All balances: " + await getSumOfAllBalances())
-            // test cumulatives
-            /*
-            console.log("User2's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address));
-            console.log("User2's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
-            await delay(60)
-            console.log("User2's token0 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address));
-            console.log("User2's token1 cumulative: " + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
-            */
+            // all
+            await logCumulatives();
+            await logAllBalances();
         })
     })
 })
