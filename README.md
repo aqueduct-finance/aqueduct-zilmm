@@ -1,7 +1,5 @@
 # Aqueduct V1
 
-## Description
-
 Superfluid native stream-only dex.
 
 ## To test locally:
