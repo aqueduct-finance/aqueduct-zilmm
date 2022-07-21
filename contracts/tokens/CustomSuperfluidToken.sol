@@ -2,7 +2,8 @@
 pragma solidity 0.8.14;
 
 import {ISuperfluid, ISuperAgreement, ISuperfluidGovernance, ISuperfluidToken, SafeCast, EventsEmitter, FixedSizeData} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
-
+import {IERC20} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
+import {ERC777Helper} from "@superfluid-finance/ethereum-contracts/contracts/libs/ERC777Helper.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "./IAqueductHost.sol";
@@ -18,6 +19,7 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
     using SafeCast for uint256;
     using SafeCast for int256;
+    using ERC777Helper for ERC777Helper.Operators;
 
     /// @dev Superfluid contract
     ISuperfluid internal immutable _host;
@@ -44,7 +46,38 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
     uint256 private _reserve12;
     uint256 internal _reserve13;
 
-    // TODO: check that it is ok to add this var here:
+    /// @dev The underlying ERC20 token
+    IERC20 internal _underlyingToken;
+
+    /// @dev Decimals of the underlying token
+    uint8 internal _underlyingDecimals;
+
+    /// @dev TokenInfo Name property
+    string internal _name;
+
+    /// @dev TokenInfo Symbol property
+    string internal _symbol;
+
+    /// @dev ERC20 Allowances Storage
+    mapping(address => mapping(address => uint256)) internal _allowances;
+
+    /// @dev ERC777 operators support data
+    ERC777Helper.Operators internal _operators;
+
+    // NOTE: for future compatibility, these are reserved solidity slots
+    // The sub-class of SuperToken solidity slot will start after _reserve22
+    uint256 internal _reserve22;
+    uint256 private _reserve23;
+    uint256 private _reserve24;
+    uint256 private _reserve25;
+    uint256 private _reserve26;
+    uint256 private _reserve27;
+    uint256 private _reserve28;
+    uint256 private _reserve29;
+    uint256 private _reserve30;
+    uint256 internal _reserve31;
+
+    // Aqueduct host contract
     IAqueductHost internal immutable _aqueductHost;
 
     constructor(ISuperfluid host, IAqueductHost aqueductHost) {

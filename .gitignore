@@ -8,3 +8,8 @@ typechain
 #Hardhat files
 cache
 artifacts
+
+#Contract address temp storage
+superAppAddress.js
+token0Address.js
+token1Address.js

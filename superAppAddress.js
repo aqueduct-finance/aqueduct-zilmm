@@ -1,1 +1,0 @@
-exports.superAppAddress = "0x8C4256c361A2877196380f712DA489781bf2020B"

@@ -13,7 +13,14 @@ import {
 } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import { ISuperfluidToken } from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 
-import "./SuperToken.sol";
+import { ERC777Helper } from "@superfluid-finance/ethereum-contracts/contracts/libs/ERC777Helper.sol";
+import { SafeERC20 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import { SafeMath } from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import { SafeCast } from "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import { IERC777Recipient } from "@openzeppelin/contracts/token/ERC777/IERC777Recipient.sol";
+import { IERC777Sender } from "@openzeppelin/contracts/token/ERC777/IERC777Sender.sol";
+import { Address } from "@openzeppelin/contracts/utils/Address.sol";
+
 import "./IAqueductHost.sol";
 import { CustomSuperfluidToken } from './CustomSuperfluidToken.sol';
 
@@ -31,37 +38,6 @@ contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
        Always double-check that new
        variables are added APPEND-ONLY. Re-ordering variables can
        permanently BREAK the deployed proxy contract. */
-
-    /// @dev The underlying ERC20 token
-    IERC20 internal _underlyingToken;
-
-    /// @dev Decimals of the underlying token
-    uint8 internal _underlyingDecimals;
-
-    /// @dev TokenInfo Name property
-    string internal _name;
-
-    /// @dev TokenInfo Symbol property
-    string internal _symbol;
-
-    /// @dev ERC20 Allowances Storage
-    mapping(address => mapping (address => uint256)) internal _allowances;
-
-    /// @dev ERC777 operators support data
-    ERC777Helper.Operators internal _operators;
-
-    // NOTE: for future compatibility, these are reserved solidity slots
-    // The sub-class of SuperToken solidity slot will start after _reserve22
-    uint256 internal _reserve22;
-    uint256 private _reserve23;
-    uint256 private _reserve24;
-    uint256 private _reserve25;
-    uint256 private _reserve26;
-    uint256 private _reserve27;
-    uint256 private _reserve28;
-    uint256 private _reserve29;
-    uint256 private _reserve30;
-    uint256 internal _reserve31;
 
     constructor(
         ISuperfluid host,
