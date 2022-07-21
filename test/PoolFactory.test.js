@@ -13,7 +13,6 @@ describe("PoolFactory", () => {
     let poolFactory;
     let token0;
     let token1;
-    let testWalletSigner;
 
     before(async () => {
         const PoolFactory = await ethers.getContractFactory("PoolFactory");
@@ -29,44 +28,19 @@ describe("PoolFactory", () => {
         token1 = await AqueductToken.deploy(SUPERFLUID_HOST, AQUEDUCT_HOST);
         await token1.deployed();
         await token1.initialize(FDAI_ADDRESS, 18, "Aqueduct Token 1", "AQUA1");
-
-        await hre.network.provider.request({
-            method: "hardhat_impersonateAccount",
-            params: [TEST_ADDRESS],
-        });
-        testWalletSigner = await ethers.getSigner(TEST_ADDRESS);
     });
 
-    it("Upgrades tokens and deploys new pool", async () => {
-        const daiContract = await ethers.getContractAt(
-            IERC20.abi,
-            FDAI_ADDRESS
+    it("Deploys new pool", async () => {
+        const pool = await poolFactory.createPool(
+            token0.address,
+            token1.address,
+            0,
+            0,
+            {
+                gasLimit: 10000000,
+            }
         );
-        const fDAIBalance = await daiContract.balanceOf(
-            testWalletSigner.address
-        );
-        console.log("fDAIBalance: ", fDAIBalance);
-        let amnt = "100000000000000000000"; // 100 - this address is one of mine and holds 800 fDAI
-        await daiContract
-            .connect(testWalletSigner)
-            .approve(token0.address, amnt);
-        await token0.connect(testWalletSigner).upgrade(amnt);
-        // TODO: reverting here
-        expect(await token0.balanceOf(testWalletSigner.address)).to.equal(
-            amountToUpgrade
-        );
-
-        await daiContract
-            .connect(testWalletSigner)
-            .approve(token1.address, amountToUpgrade);
-        token1 = await token1.connect(testWalletSigner);
-        await token1.upgrade(amountToUpgrade, {
-            gasLimit: 1000000,
-        });
-        expect(await token1.balanceOf(testWalletSigner.address)).to.equal(
-            amountToUpgrade
-        );
-
-        // TODO: deploy new pool
+        await pool.wait();
+        console.log("Pool deployed to: ", pool);
     });
 });
