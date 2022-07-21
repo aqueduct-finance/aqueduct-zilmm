@@ -56,7 +56,7 @@ describe("PoolFactory", () => {
             amountToUpgrade
         );
 
-        await dai
+        await daiContract
             .connect(testWalletSigner)
             .approve(token1.address, amountToUpgrade);
         token1 = await token1.connect(testWalletSigner);
