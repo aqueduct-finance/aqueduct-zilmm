@@ -17,12 +17,14 @@ module.exports = {
     timeout: 100000000
   },
   networks: {
-    mumbai: {
-      url: process.env.ALCHEMY_KEY,
-      accounts: [process.env.PRIVATE_KEY],
+    hardhat: {
+      forking: {
+        url: process.env.GOERLI_ALCHEMY_KEY,
+      },
+      gas: 1800000,
     },
-    rinkeby: {
-      url: 'https://eth-goerli.g.alchemy.com/v2/qUJOAEevYmXUZ0omNn5fjaT_wIU_UUUU',//process.env.RINKEBY_ALCHEMY_KEY,
+    goerli: {
+      url: process.env.GOERLI_ALCHEMY_KEY,
       accounts: [process.env.PRIVATE_KEY],
     },
   },

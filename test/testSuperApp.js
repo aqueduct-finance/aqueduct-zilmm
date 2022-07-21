@@ -1,24 +1,18 @@
-//import { Framework } from "@superfluid-finance/sdk-core";
-//import { ethers } from "hardhat";
 const { Framework } = require('@superfluid-finance/sdk-core');
 const { ethers } = require("hardhat");
-const IERC20 = artifacts.require("contracts/SuperApp.sol:IERC20");
+const IERC20 = artifacts.require("@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20")
 require("dotenv").config();
 
 // test wallets
 const testWalletAddress = '0xFc25b7BE2945Dd578799D15EC5834Baf34BA28e1';
 
 // tokens
-//const maticxAddress = '0x96B82B65ACF7072eFEb00502F45757F254c2a0D4';
-const fdaixAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8'; // rinkeby: '0x745861AeD1EEe363b4AaA5F1994Be40b1e05Ff90'; //mumbai: '0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f';
-const daiAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8'; // rinkeby: '0xc7AD46e0b8a400Bb3C915120d284AafbA8fc4735';
-
-// uniswap
-//const uniswapFactory = '0x1F98431c8aD98523631AE4a59f267346ea31F984';
+const fdaixAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8';
+const daiAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8';
 
 // superfluid
-const superfluidHost = '0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9'; // rinkeby: '0xeD5B5b32110c3Ded02a07c8b8e97513FAfb883B6'; // mumbai: '0xEB796bdb90fFA0f28255275e16936D25d3418603';
-const resolverAddress = '0x3710AB3fDE2B61736B8BB0CE845D6c61F667a78E'; // rinkeby: '0x659635Fab0A0cef1293f7eb3c7934542B6A6B31A'; // mumbai: '0x8C54C83FbDe3C59e59dd6E324531FB93d4F504d3';
+const superfluidHost = '0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9';
+const resolverAddress = '0x3710AB3fDE2B61736B8BB0CE845D6c61F667a78E';
 
 describe("SuperApp Tests", function () {
 
@@ -45,26 +39,17 @@ describe("SuperApp Tests", function () {
         await hre.ethers.provider.send("evm_mine");
     };
 
-    const getSumOfAllBalances = async () => {
-        const a = (await token0.balanceOf(testWalletAddress)) / 10**18;
-        const b = (await token1.balanceOf(testWalletAddress)) / 10**18;
-        const c = (await token0.balanceOf(superApp.address)) / 10**18;
-        const d = (await token1.balanceOf(superApp.address)) / 10**18;
-        const e = (await token0.balanceOf(addr1.address)) / 10**18;
-        const f = (await token1.balanceOf(addr1.address)) / 10**18;
+    const logSumOfAllBalances = async () => {
+        var sum = (await token0.balanceOf(testWalletAddress)) / 10**18;
+        sum += (await token1.balanceOf(testWalletAddress)) / 10**18;
+        sum += (await token0.balanceOf(superApp.address)) / 10**18;
+        sum += (await token1.balanceOf(superApp.address)) / 10**18;
+        sum += (await token0.balanceOf(addr1.address)) / 10**18;
+        sum += (await token1.balanceOf(addr1.address)) / 10**18;
+        sum += (await token0.balanceOf(addr2.address)) / 10**18;
+        sum +=(await token1.balanceOf(addr2.address)) / 10**18;
 
-        return (a + b + c + d + e + f) * 10**18;
-        //return a;
-    }
-
-    const logAllBalances2 = async () => {
-        console.log('____________________________')
-        console.log('LP0:  ' + (await token0.balanceOf(testWalletAddress)) / 10**18 );
-        console.log('LP1:  ' + (await token1.balanceOf(testWalletAddress)) / 10**18);
-        console.log('pool0:  ' + (await token0.balanceOf(superApp.address)) / 10**18);
-        console.log('pool1:  ' + (await token1.balanceOf(superApp.address)) / 10**18);
-        console.log('userA0:  ' + (await token0.balanceOf(addr1.address)) / 10**18);
-        console.log('userA1:  ' + (await token1.balanceOf(addr1.address)) / 10**18);
+        console.log('Sum of all balances: ' + sum);
     }
 
     const logAllBalances = async () => {
@@ -121,7 +106,6 @@ describe("SuperApp Tests", function () {
         await token1.initialize(daiAddress, 18, "Aqueduct Token 2", "AQUA2");
 
         // init pool
-        //await superApp.initialize(token0.address, token1.address, 100000000000, 100000000000);
         await superApp.initialize(token0.address, token1.address, 0, 0);
 
         // init superfluid sdk
@@ -153,7 +137,7 @@ describe("SuperApp Tests", function () {
     describe("generic streaming tests", function () {
         it("test stream (expected no revert)", async function () {
             // upgrade tokens
-            const daiContract = await ethers.getContractAt("contracts/SuperApp.sol:IERC20", daiAddress);
+            const daiContract = await ethers.getContractAt(IERC20.abi, daiAddress);
             let amnt = '100000000000000000000'; // 100
             await daiContract.connect(testWalletSigner).approve(token0.address, amnt);
             await token0.connect(testWalletSigner).upgrade(amnt);
@@ -169,9 +153,9 @@ describe("SuperApp Tests", function () {
             //console.log("Contract's token0 balance: " + (await token0.balanceOf(superApp.address) / 10**18));
             //console.log("Contract's token1 balance: " + (await token1.balanceOf(superApp.address) / 10**18));
 
-            await logInitialCumulatives();
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
 
             // create flow of token0 into the Super App
             console.log('\n_____ LP token0 --> token1 _____')
@@ -196,15 +180,15 @@ describe("SuperApp Tests", function () {
             await txnResponse2.wait();
 
             // all
-            await logInitialCumulatives();
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
 
             await delay(36000);
 
-            await logInitialCumulatives();
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
 
             // perform one way swap with second test wallet
             console.log('\n_____ User A token0 --> token1 _____')
@@ -222,12 +206,14 @@ describe("SuperApp Tests", function () {
             // all
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
 
             await delay(36000);
 
             // all
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
 
             // perform one way swap in opposite direction with third test wallet
             console.log('\n_____ User B token0 <-- token1 _____')
@@ -244,12 +230,14 @@ describe("SuperApp Tests", function () {
             // all
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
 
             await delay(36000);
 
             // all
             await logCumulatives();
             await logAllBalances();
+            await logSumOfAllBalances();
         })
     })
 })
