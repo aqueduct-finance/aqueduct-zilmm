@@ -8,6 +8,7 @@ import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/c
 
 import "./libraries/UQ112x112.sol";
 import "./interfaces/IAqueductHost.sol";
+import "./interfaces/IPoolFactory.sol";
 
 contract SuperApp is SuperAppBase, IAqueductHost {
     using UQ112x112 for uint224;
@@ -18,12 +19,11 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     bytes32 public constant CFA_ID =
         keccak256("org.superfluid-finance.agreements.ConstantFlowAgreement.v1");
     IConstantFlowAgreementV1 cfa;
-    ISuperfluid _host;
+    ISuperfluid host;
 
     /* --- Pool variables --- */
-    address public factory;
-    ISuperToken public token0;
-    ISuperToken public token1;
+    ISuperToken public immutable token0;
+    ISuperToken public immutable token1;
 
     uint112 private flowIn0;
     uint112 private flowIn1;
@@ -41,11 +41,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     }
     mapping(address => UserPriceCumulative) private userPriceCumulatives;
 
-    constructor(ISuperfluid host) payable {
+    constructor() payable {
+        (host, token0, token1, flowIn0, flowIn1) = IPoolFactory(msg.sender).parameters();
         assert(address(host) != address(0));
-
-        _host = host;
-        factory = msg.sender;
 
         cfa = IConstantFlowAgreementV1(address(host.getAgreementClass(CFA_ID)));
         cfaV1 = CFAv1Library.InitData(host, cfa);
@@ -54,20 +52,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             SuperAppDefinitions.BEFORE_AGREEMENT_CREATED_NOOP;
 
         host.registerApp(configWord);
-    }
-
-    // called once by the factory at time of deployment
-    function initialize(
-        ISuperToken _token0,
-        ISuperToken _token1,
-        uint112 in0,
-        uint112 in1
-    ) external {
-        require(msg.sender == factory, "FORBIDDEN"); // sufficient check
-        token0 = _token0;
-        token1 = _token1;
-        flowIn0 = in0;
-        flowIn1 = in1;
     }
 
     /* --- Helper functions --- */
@@ -86,7 +70,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         view
         returns (address user)
     {
-        return _host.decodeCtx(_ctx).msgSender;
+        return host.decodeCtx(_ctx).msgSender;
     }
 
     /* Gets the incoming flowRate for a given supertoken/user */
