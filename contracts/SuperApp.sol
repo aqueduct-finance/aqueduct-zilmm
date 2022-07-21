@@ -32,11 +32,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     uint256 public price0CumulativeLast;
     uint256 public price1CumulativeLast;
 
-    enum IncomingStreamType {
-        SWAP,
-        LIQUIDITY
-    }
-
     // map user address to their starting price cumulatives
     struct UserPriceCumulative {
         int96 netFlowRate0;
@@ -84,20 +79,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         returns (ISuperToken)
     {
         return address(tokenIn) == address(token0) ? token1 : token0;
-    }
-
-    /* Gets address of wallet that initiated stream (msg.sender would just point to this contract) */
-    function getParamsFromCtx(bytes calldata _ctx)
-        internal
-        view
-        returns (IncomingStreamType streamType, address user)
-    {
-        ISuperfluid.Context memory decompiledContext = _host.decodeCtx(_ctx);
-        streamType = abi.decode(
-            decompiledContext.userData,
-            (IncomingStreamType)
-        );
-        user = decompiledContext.msgSender;
     }
 
     function getUserFromCtx(bytes calldata _ctx)
@@ -211,6 +192,16 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         }
     }
 
+    function safeUnsignedAdd(uint112 a, int96 b)
+        internal
+        pure
+        returns (uint112)
+    {
+        // TODO: this can still technically underflow, add try/catch?
+        // This is used for computing pool net flow, which should never be < 0
+        return b < 0 ? a - uint96(b * -1) : a + uint96(b);
+    }
+
     // update flow reserves and, on the first call per block, price accumulators
     function _update(
         uint112 _flowIn0,
@@ -257,14 +248,9 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             userPriceCumulatives[user].netFlowRate0 += relFlow1;
             userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
         }
-
-        flowIn0 = relFlow0 < 0
-            ? flowIn0 - uint96(relFlow0)
-            : flowIn0 + uint96(relFlow0);
-
-        flowIn1 = relFlow1 < 0
-            ? flowIn1 - uint96(relFlow1)
-            : flowIn1 + uint96(relFlow1);
+        
+        flowIn0 = safeUnsignedAdd(flowIn0, relFlow0);
+        flowIn1 = safeUnsignedAdd(flowIn1, relFlow1);
 
         blockTimestampLast = blockTimestamp;
     }
@@ -272,7 +258,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     /* --- Superfluid callbacks --- */
 
     struct Flow {
-        IncomingStreamType streamType;
         address user;
         int96 flowRate;
         int96 netFlowRate;
@@ -295,16 +280,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
         // avoid stack too deep
         Flow memory flow;
-        {
-            /*
-            (IncomingStreamType streamType, address user) = getParamsFromCtx(
-                _ctx
-            );
-            flow.streamType = streamType;
-            */
-
-            flow.user = getUserFromCtx(_ctx);
-        }
+        flow.user = getUserFromCtx(_ctx);
         flow.flowRate = getFlowRate(_superToken, flow.user);
 
         //(uint112 _flowIn0, uint112 _flowIn1,) = getFlows(); // gas savings TODO: we can optimize here by loading storage vars into stack, but we also need to avoid stack too deep errors
@@ -345,7 +321,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // keep track of old flowRate to calc net change in afterAgreementUpdated
         address user = getUserFromCtx(_ctx);
         int96 flowRate = getFlowRate(_superToken, user);
-        return abi.encodePacked(flowRate);
+        return abi.encode(flowRate);
     }
 
     // onlyExpected(_agreementClass)
@@ -365,13 +341,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
         // avoid stack too deep
         Flow memory flow;
-        {
-            (IncomingStreamType streamType, address user) = getParamsFromCtx(
-                _ctx
-            );
-            flow.streamType = streamType;
-            flow.user = user;
-        }
+        flow.user = getUserFromCtx(_ctx);
         flow.flowRate = getFlowRate(_superToken, flow.user);
         flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
 
@@ -405,15 +375,11 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             bytes memory // cbdata
         )
     {
-        require(1 == 2, 'nice');
-
         // keep track of old flowRate to calc net change in afterAgreementTerminated
         address user = getUserFromCtx(_ctx);
         int96 flowRate = getFlowRate(_superToken, user);
-        return abi.encodePacked(flowRate);
+        return abi.encode(flowRate);
     }
-
-    event reportNum(int96 rate);
 
     function afterAgreementTerminated(
         ISuperToken _superToken,
@@ -423,28 +389,17 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         bytes calldata _cbdata,
         bytes calldata _ctx
     ) external override onlyHost returns (bytes memory newCtx) {
-    
         require(
             address(_superToken) == address(token0) ||
                 address(_superToken) == address(token1),
             "RedirectAll: token not in pool"
         );
 
-        require(1 == 2, 'nice');
-
         // avoid stack too deep
         Flow memory flow;
-        {
-            (IncomingStreamType streamType, address user) = getParamsFromCtx(
-                _ctx
-            );
-            flow.streamType = streamType;
-            flow.user = user;
-        }
+        flow.user = getUserFromCtx(_ctx);
         flow.flowRate = getFlowRate(_superToken, flow.user);
         flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
-
-        emit reportNum(flow.netFlowRate);
 
         // rebalance
         if (address(_superToken) == address(token0)) {

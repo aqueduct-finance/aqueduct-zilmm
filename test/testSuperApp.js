@@ -165,8 +165,8 @@ describe("SuperApp Tests", function () {
                 superToken: token0.address,
                 flowRate: "100000000000"
             }); //100000000000
-            const txnResponse = await createFlowOperation.exec(signer);
-            await txnResponse.wait();
+            const createFlowRes = await createFlowOperation.exec(signer);
+            await createFlowRes.wait();
 
             // create flow of token1 into the Super App
             console.log('\n_____ LP token0 <-- token1 _____')
@@ -176,8 +176,8 @@ describe("SuperApp Tests", function () {
                 superToken: token1.address,
                 flowRate: "100000000000"
             });
-            const txnResponse2 = await createFlowOperation2.exec(signer);
-            await txnResponse2.wait();
+            const createFlowRes2 = await createFlowOperation2.exec(signer);
+            await createFlowRes2.wait();
 
             // all
             await logCumulatives();
@@ -200,8 +200,8 @@ describe("SuperApp Tests", function () {
                 superToken: token0.address,
                 flowRate: "10000000000"
             });
-            const txnResponse3 = await createFlowOperation3.exec(addr1Signer);
-            await txnResponse3.wait();
+            const createFlowRes3 = await createFlowOperation3.exec(addr1Signer);
+            await createFlowRes3.wait();
 
             // all
             await logCumulatives();
@@ -224,8 +224,8 @@ describe("SuperApp Tests", function () {
                 superToken: token1.address,
                 flowRate: "5000000"
             });
-            const txnResponse4 = await createFlowOperation4.exec(addr2Signer);
-            await txnResponse4.wait();
+            const createFlowRes4 = await createFlowOperation4.exec(addr2Signer);
+            await createFlowRes4.wait();
 
             // all
             await logCumulatives();
@@ -238,6 +238,15 @@ describe("SuperApp Tests", function () {
             await logCumulatives();
             await logAllBalances();
             await logSumOfAllBalances();
+
+            // cancel flows
+            const deleteFlowOperation3 = sf.cfaV1.deleteFlow({
+                sender: addr1.address,
+                receiver: superApp.address,
+                superToken: token0.address
+            });
+            const deleteFlowRes = await deleteFlowOperation3.exec(addr1Signer);
+            const deleteFlowTxRes = await deleteFlowRes.wait();
         })
     })
 })
