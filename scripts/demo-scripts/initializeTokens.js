@@ -7,16 +7,6 @@ const AQUEDUCT_HOST = "0x36858E815F9B495fF19e65cB9b9614Ec263f5A4B";
 const FDAI_ADDRESS = "0x15F0Ca26781C3852f8166eD2ebce5D18265cceb7";
 
 const main = async () => {
-    // DEPLOY SUPER APP
-    const SuperApp = await ethers.getContractFactory("SuperApp");
-    const superApp = await SuperApp.deploy(SUPERFLUID_HOST);
-    await superApp.deployed();
-    fs.writeFileSync(
-        "superAppAddress.js",
-        `exports.superAppAddress = "${superApp.address}"`
-    );
-    console.log("SuperApp deployed to:", superApp.address);
-
     // DEPLOY TOKENS
     const AqueductToken = await ethers.getContractFactory("AqueductToken");
 
