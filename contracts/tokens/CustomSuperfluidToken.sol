@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: AGPLv3
-pragma solidity 0.8.14;
+pragma solidity ^0.8.14;
 
 import {ISuperfluid, ISuperAgreement, ISuperfluidGovernance, ISuperfluidToken, SafeCast, EventsEmitter, FixedSizeData} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 import {IERC20} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import {ERC777Helper} from "@superfluid-finance/ethereum-contracts/contracts/libs/ERC777Helper.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
-import "./IAqueductHost.sol";
+import "./../interfaces/IPoolFactory.sol";
 
 /**
  * @title Superfluid's token implementation
@@ -78,11 +78,11 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
     uint256 internal _reserve31;
 
     // Aqueduct host contract
-    IAqueductHost internal immutable _aqueductHost;
+    IPoolFactory internal immutable _poolFactory;
 
-    constructor(ISuperfluid host, IAqueductHost aqueductHost) {
+    constructor(ISuperfluid host, IPoolFactory aqueductHost) {
         _host = host;
-        _aqueductHost = aqueductHost;
+        _poolFactory = aqueductHost;
     }
 
     /// @dev ISuperfluidToken.getHost implementation
@@ -137,11 +137,12 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                 ).getAccountFlowInfo(this, account);
 
                 // get TWAP net flow
-                int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
+                // TODO: Need to find a way to get the opposite token or thing of a better way to do this. Should TWAP rely on knowing about two tokens?
+                int96 twapNetFlowRate = _poolFactory.getTwapNetFlowRate(
                     address(this),
                     account
                 );
-                uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(
+                uint256 cumulativeDelta = _poolFactory.getUserCumulativeDelta(
                     address(this),
                     account,
                     timestamp
@@ -437,11 +438,11 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                     ).getAccountFlowInfo(this, account);
 
                     // get TWAP net flow
-                    int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
+                    int96 twapNetFlowRate = _poolFactory.getTwapNetFlowRate(
                         address(this),
                         account
                     );
-                    uint256 cumulativeDelta = _aqueductHost
+                    uint256 cumulativeDelta = _poolFactory
                         .getUserCumulativeDelta(
                             address(this),
                             account,

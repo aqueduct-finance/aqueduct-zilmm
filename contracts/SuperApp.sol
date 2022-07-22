@@ -7,10 +7,9 @@ import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/app
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "./libraries/UQ112x112.sol";
-import "./interfaces/IAqueductHost.sol";
 import "./interfaces/IPoolFactory.sol";
 
-contract SuperApp is SuperAppBase, IAqueductHost {
+contract SuperApp is SuperAppBase {
     using UQ112x112 for uint224;
 
     /* --- Superfluid --- */
@@ -39,7 +38,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         uint256 price0Cumulative;
         uint256 price1Cumulative;
     }
-    mapping(address => UserPriceCumulative) private userPriceCumulatives;
+    mapping(address => UserPriceCumulative) public userPriceCumulatives;
 
     constructor() payable {
         (host, token0, token1, flowIn0, flowIn1) = IPoolFactory(msg.sender).parameters();
@@ -55,6 +54,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     }
 
     /* --- Helper functions --- */
+
+    function getTokenPair() external view returns (ISuperToken, ISuperToken) {
+        return (token0, token1);
+    }
 
     /* Gets the opposite token in the pool given one supertoken (assumes tokenIn is part of pool) */
     function getOppositeToken(ISuperToken tokenIn)
@@ -103,15 +106,22 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     function getUserPriceCumulatives(address user)
         external
         view
-        returns (uint256 pc0, uint256 pc1)
+        returns (
+            int96 netFlowRate0,
+            int96 netFlowRate1,
+            uint256 price0Cumulative,
+            uint256 price1Cumulative
+        )
     {
         UserPriceCumulative memory upc = userPriceCumulatives[user];
-        pc0 = upc.price0Cumulative;
-        pc1 = upc.price1Cumulative;
+        netFlowRate0 = upc.netFlowRate0;
+        netFlowRate1 = upc.netFlowRate1;
+        price0Cumulative = upc.price0Cumulative;
+        price1Cumulative = upc.price1Cumulative;
     }
 
     function getCumulativesAtTime(uint256 timestamp)
-        internal
+        public
         view
         returns (uint256 pc0, uint256 pc1)
     {
@@ -138,43 +148,43 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         (pc0, pc1) = getCumulativesAtTime(block.timestamp);
     }
 
-    function getUserCumulativeDelta(
-        address token,
-        address user,
-        uint256 timestamp
-    ) public view returns (uint256 cumulativeDelta) {
-        if (token == address(token0)) {
-            (uint256 S, ) = getCumulativesAtTime(timestamp);
-            uint256 S0 = userPriceCumulatives[user].price0Cumulative;
-            cumulativeDelta = UQ112x112.decode(S - S0);
-            cumulativeDelta = S - S0;
-        } else if (token == address(token1)) {
-            (, uint256 S) = getCumulativesAtTime(timestamp);
-            uint256 S0 = userPriceCumulatives[user].price1Cumulative;
-            cumulativeDelta = UQ112x112.decode(S - S0);
-            cumulativeDelta = S - S0;
-        }
-    }
+    // function getUserCumulativeDelta(
+    //     address token,
+    //     address user,
+    //     uint256 timestamp
+    // ) public view returns (uint256 cumulativeDelta) {
+    //     if (token == address(token0)) {
+    //         (uint256 S, ) = getCumulativesAtTime(timestamp);
+    //         uint256 S0 = userPriceCumulatives[user].price0Cumulative;
+    //         cumulativeDelta = UQ112x112.decode(S - S0);
+    //         cumulativeDelta = S - S0;
+    //     } else if (token == address(token1)) {
+    //         (, uint256 S) = getCumulativesAtTime(timestamp);
+    //         uint256 S0 = userPriceCumulatives[user].price1Cumulative;
+    //         cumulativeDelta = UQ112x112.decode(S - S0);
+    //         cumulativeDelta = S - S0;
+    //     }
+    // }
 
-    function getRealTimeUserCumulativeDelta(address token, address user)
-        external
-        view
-        returns (uint256 cumulativeDelta)
-    {
-        cumulativeDelta = getUserCumulativeDelta(token, user, block.timestamp);
-    }
+    // function getRealTimeUserCumulativeDelta(address token, address user)
+    //     external
+    //     view
+    //     returns (uint256 cumulativeDelta)
+    // {
+    //     cumulativeDelta = getUserCumulativeDelta(token, user, block.timestamp);
+    // }
 
-    function getTwapNetFlowRate(address token, address user)
-        external
-        view
-        returns (int96 netFlowRate)
-    {
-        if (token == address(token0)) {
-            netFlowRate = userPriceCumulatives[user].netFlowRate0;
-        } else if (token == address(token1)) {
-            netFlowRate = userPriceCumulatives[user].netFlowRate1;
-        }
-    }
+    // function getTwapNetFlowRate(address token, address user)
+    //     external
+    //     view
+    //     returns (int96 netFlowRate)
+    // {
+    //     if (token == address(token0)) {
+    //         netFlowRate = userPriceCumulatives[user].netFlowRate0;
+    //     } else if (token == address(token1)) {
+    //         netFlowRate = userPriceCumulatives[user].netFlowRate1;
+    //     }
+    // }
 
     function safeUnsignedAdd(uint112 a, int96 b)
         internal

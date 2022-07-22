@@ -3,14 +3,17 @@ const { ethers } = require("hardhat");
 const fs = require("fs");
 
 const SUPERFLUID_HOST = "0xeD5B5b32110c3Ded02a07c8b8e97513FAfb883B6";
-const AQUEDUCT_HOST = "0x36858E815F9B495fF19e65cB9b9614Ec263f5A4B";
+const { poolFactoryAddress } = require("../../poolFactoryAddress.js");
 const FDAI_ADDRESS = "0x15F0Ca26781C3852f8166eD2ebce5D18265cceb7";
 
 const main = async () => {
     // DEPLOY TOKENS
     const AqueductToken = await ethers.getContractFactory("AqueductToken");
 
-    const token0 = await AqueductToken.deploy(SUPERFLUID_HOST, AQUEDUCT_HOST);
+    const token0 = await AqueductToken.deploy(
+        SUPERFLUID_HOST,
+        poolFactoryAddress
+    );
     await token0.deployed();
     fs.writeFileSync(
         "token0Address.js",
@@ -18,7 +21,10 @@ const main = async () => {
     );
     console.log("token0 deployed to:", token0.address);
 
-    const token1 = await AqueductToken.deploy(SUPERFLUID_HOST, AQUEDUCT_HOST);
+    const token1 = await AqueductToken.deploy(
+        SUPERFLUID_HOST,
+        poolFactoryAddress
+    );
     await token1.deployed();
     fs.writeFileSync(
         "token1Address.js",

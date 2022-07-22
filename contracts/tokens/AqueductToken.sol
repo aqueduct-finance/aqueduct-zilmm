@@ -21,7 +21,7 @@ import { IERC777Recipient } from "@openzeppelin/contracts/token/ERC777/IERC777Re
 import { IERC777Sender } from "@openzeppelin/contracts/token/ERC777/IERC777Sender.sol";
 import { Address } from "@openzeppelin/contracts/utils/Address.sol";
 
-import "./IAqueductHost.sol";
+import "./../interfaces/IPoolFactory.sol";
 import { CustomSuperfluidToken } from './CustomSuperfluidToken.sol';
 
 contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
@@ -41,9 +41,9 @@ contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
 
     constructor(
         ISuperfluid host,
-        IAqueductHost aqueductHost
+        IPoolFactory poolFactory
     )
-        CustomSuperfluidToken(host, aqueductHost)
+        CustomSuperfluidToken(host, poolFactory)
         // solhint-disable-next-line no-empty-blocks
     {
     }

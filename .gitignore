@@ -10,6 +10,6 @@ cache
 artifacts
 
 #Contract address temp storage
-superAppAddress.js
+poolFactoryAddress.js
 token0Address.js
 token1Address.js

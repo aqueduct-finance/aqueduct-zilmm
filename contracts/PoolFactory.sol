@@ -5,6 +5,7 @@ import {ISuperfluid, ISuperApp} from "@superfluid-finance/ethereum-contracts/con
 
 import "./interfaces/IPoolFactory.sol";
 import "./SuperApp.sol";
+import "./interfaces/IPool.sol";
 
 contract PoolFactory is IPoolFactory {
     struct Parameters {
@@ -52,5 +53,67 @@ contract PoolFactory is IPoolFactory {
         // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
         getPool[token1][token0] = pool;
         emit PoolCreated(token0, token1, pool);
+    }
+
+    // TODO: move to dedicated Aqueduct Host contract
+    function getUserCumulativeDelta(
+        address targetToken,
+        address oppositeToken,
+        address user,
+        uint256 timestamp
+    ) public view returns (uint256 cumulativeDelta) {
+        address pool = getPool[targetToken][oppositeToken];
+        require(getPool[targetToken][oppositeToken] != address(0), 'Aqueduct: POOL_DOESNT_EXIST');
+
+        (, , uint256 price0Cumulative, uint256 price1Cumulative) = IPool(pool).getUserPriceCumulatives(user);
+        (ISuperToken token0, ISuperToken token1) = IPool(pool).getTokenPair();
+
+        if (targetToken == address(token0)) {
+            (uint256 S, ) = IPool(pool).getCumulativesAtTime(timestamp);
+            uint256 S0 = price0Cumulative;
+            cumulativeDelta = UQ112x112.decode(S - S0);
+            cumulativeDelta = S - S0;
+        } else if (targetToken == address(token1)) {
+            (, uint256 S) = IPool(pool).getCumulativesAtTime(timestamp);
+            uint256 S0 = price1Cumulative;
+            cumulativeDelta = UQ112x112.decode(S - S0);
+            cumulativeDelta = S - S0;
+        }
+    }
+
+    // TODO: move to dedicated Aqueduct Host contract
+    function getRealTimeUserCumulativeDelta(
+        address targetToken,
+        address oppositeToken,
+        address user
+    )
+        external
+        view
+        returns (uint256 cumulativeDelta)
+    {
+        cumulativeDelta = getUserCumulativeDelta(targetToken, oppositeToken, user, block.timestamp);
+    }
+
+    // TODO: move to dedicated Aqueduct Host contract
+    function getTwapNetFlowRate(
+        address targetToken,
+        address oppositeToken,
+        address user
+    )
+        external
+        view
+        returns (int96 netFlowRate)
+    {
+        address pool = getPool[targetToken][oppositeToken];
+        require(getPool[targetToken][oppositeToken] != address(0), 'Aqueduct: POOL_DOESNT_EXIST');
+
+        (int96 netFlowRate0, int96 netFlowRate1, , ) = IPool(pool).getUserPriceCumulatives(user);
+        (ISuperToken token0, ISuperToken token1) = IPool(pool).getTokenPair();
+
+        if (targetToken == address(token0)) {
+            netFlowRate = netFlowRate0;
+        } else if (targetToken == address(token1)) {
+            netFlowRate = netFlowRate1;
+        }
     }
 }
