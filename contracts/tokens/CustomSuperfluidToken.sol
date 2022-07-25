@@ -137,7 +137,7 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                 ).getAccountFlowInfo(this, account);
 
                 // get TWAP net flow
-                // TODO: Need to find a way to get the opposite token or thing of a better way to do this. Should TWAP rely on knowing about two tokens?
+                // TODO: Call 
                 int96 twapNetFlowRate = _poolFactory.getTwapNetFlowRate(
                     address(this),
                     account
@@ -148,6 +148,9 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                     timestamp
                 );
 
+                // 1. Move these blocks to the factory
+                // 2. Do this for each stream and then add the values together
+                // 3. Set result to agreementDynamicBalance
                 // modify balance to include TWAP streams
                 agreementDynamicBalance -=
                     int256(twapNetFlowRate) *
