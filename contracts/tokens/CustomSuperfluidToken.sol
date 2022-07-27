@@ -134,31 +134,24 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                             )
                         )
                     )
-                ).getAccountFlowInfo(this, account);
+                ).getAccountFlowInfo(this, account); 
 
-                // get TWAP net flow
-                // TODO: Call 
-                int96 twapNetFlowRate = _poolFactory.getTwapNetFlowRate(
-                    address(this),
-                    account
-                );
-                uint256 cumulativeDelta = _poolFactory.getUserCumulativeDelta(
+                int256 updatedAgreementDynamicBalance = agreementDynamicBalance;
+
+                int256 realtimeBalance = _poolFactory.realtimeBalanceOf(
+                    updatedAgreementDynamicBalance,
                     address(this),
                     account,
-                    timestamp
+                    timestamp,
+                    initialTimestamp
                 );
+
+                agreementDynamicBalance = realtimeBalance;
 
                 // 1. Move these blocks to the factory
                 // 2. Do this for each stream and then add the values together
                 // 3. Set result to agreementDynamicBalance
                 // modify balance to include TWAP streams
-                agreementDynamicBalance -=
-                    int256(twapNetFlowRate) *
-                    (timestamp - initialTimestamp).toInt256();
-
-                agreementDynamicBalance +=
-                    (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
-                    2**112;
             }
 
             deposit = deposit + agreementDeposit;
@@ -440,26 +433,13 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                         )
                     ).getAccountFlowInfo(this, account);
 
-                    // get TWAP net flow
-                    int96 twapNetFlowRate = _poolFactory.getTwapNetFlowRate(
+                    agreementDynamicBalance = _poolFactory.realtimeBalanceOf(
+                        agreementDynamicBalance,
                         address(this),
-                        account
+                        account,
+                        timestamp,
+                        initialTimestamp
                     );
-                    uint256 cumulativeDelta = _poolFactory
-                        .getUserCumulativeDelta(
-                            address(this),
-                            account,
-                            timestamp
-                        );
-
-                    // modify balance to include TWAP streams
-                    agreementDynamicBalance -=
-                        int256(twapNetFlowRate) *
-                        (timestamp - initialTimestamp).toInt256();
-
-                    agreementDynamicBalance +=
-                        (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
-                        2**112;
 
                     _settleBalance(account, agreementDynamicBalance);
                 } else {

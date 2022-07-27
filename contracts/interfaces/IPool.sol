@@ -16,8 +16,13 @@ interface IPool {
             uint256 price1Cumulative
         );
 
-    function getCumulativesAtTime(uint256 timestamp)
+    /**
+     * @return cumulativeDelta computed as S - S0
+    */
+    function getUserCumulativeDelta(address token, address user, uint256 timestamp) external view returns (uint256 cumulativeDelta);
+
+    function getTwapNetFlowRate(address token, address user)
         external
         view
-        returns (uint256 pc0, uint256 pc1);
+        returns (int96 netFlowRate);
 }

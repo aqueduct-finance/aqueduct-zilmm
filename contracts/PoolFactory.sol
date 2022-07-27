@@ -2,6 +2,7 @@
 pragma solidity >=0.8.0;
 
 import {ISuperfluid, ISuperApp} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
+import {SafeCast} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 
 import "./interfaces/IPoolFactory.sol";
 import "./SuperApp.sol";
@@ -14,6 +15,9 @@ import "./interfaces/IAqueductToken.sol";
 // 3. See comments on CustomSuperfluidToken.sol
 
 contract PoolFactory is IPoolFactory {
+    using SafeCast for uint256;
+    using SafeCast for int256;
+
     struct Parameters {
         ISuperfluid host;
         ISuperToken token0;
@@ -22,9 +26,15 @@ contract PoolFactory is IPoolFactory {
         uint112 flowIn1;
     }
 
+    struct AccountPoolList {
+        IPool[10] pools;
+        uint index;
+    }
+
     Parameters public parameters;
     ISuperfluid public host;
 
+    mapping(address => AccountPoolList) public accountPoolList;
     mapping(address => mapping(address => address)) public getPool;
 
     event PoolCreated(address _token0, address _token1, address _pool);
@@ -59,5 +69,67 @@ contract PoolFactory is IPoolFactory {
         // populate mapping in the reverse direction, deliberate choice to avoid the cost of comparing addresses
         getPool[token1][token0] = pool;
         emit PoolCreated(token0, token1, pool);
+    }
+
+    function realtimeBalanceOf(
+        int256 _agreementDynamicBalance,
+        address _token,
+        address _account,
+        uint256 _timestamp,
+        uint256 _initialTimestamp
+    ) external view returns (int256 realtimeBalance) {
+        AccountPoolList memory accountPools = accountPoolList[_account];
+        uint accountPoolsLength = accountPools.pools.length;
+        require(accountPoolsLength > 0, "Aqueduct: NO_POOLS_ASSOCIATED");
+        for (uint i = 0; i < accountPoolsLength; i++) {
+            int96 netFlowRate = accountPools.pools[i].getTwapNetFlowRate(_token, _account);
+            uint256 cumulativeDelta = accountPools.pools[i].getUserCumulativeDelta(_token, _account, _timestamp);
+
+            // modify balance to include TWAP streams
+            _agreementDynamicBalance -=
+                int256(netFlowRate) *
+                (_timestamp - _initialTimestamp).toInt256();
+
+            _agreementDynamicBalance +=
+                (int256(netFlowRate) * int256(cumulativeDelta)) /
+                2**112;
+            
+            realtimeBalance = _agreementDynamicBalance;
+        }
+    }
+
+    /**
+     * adds a pool to an account. This can be upto a maximum of 10
+     * Increments the index so the function knows where to insert the next pool in the array.
+    */
+    function addAccountPool(address _account) external {
+        require(accountPoolList[_account].pools.length <= 10, "Aqueduct: 10_POOL_LIMIT");
+        AccountPoolList memory accountPools = accountPoolList[_account];
+        accountPools.pools[accountPools.index] = IPool(msg.sender);
+        accountPools.index++;
+    }
+
+    /**
+     * removes a pool that is associated with an account
+     * decrements the index so that the array does not fill up with unused pools
+    */
+    function removeAccountPool(address _account, address _pool) external {
+        AccountPoolList memory accountPools = accountPoolList[_account];
+        uint accountPoolsLength = accountPools.pools.length;
+
+        IPool[10] memory pools = accountPools.pools;
+
+        for (uint i = 0; i < accountPoolsLength; i++) {
+            if (pools[i] == IPool(_pool)) {
+                // i = the pool to delete
+                for (uint x = i; x < accountPoolsLength - 1; x++) {
+                    pools[x] = pools[x+1];
+                }
+
+                delete pools[accountPoolsLength - 1];
+                accountPools.index--;
+                break;  
+            }
+        }
     }
 }

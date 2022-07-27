@@ -21,6 +21,7 @@ contract SuperApp is SuperAppBase {
     ISuperfluid host;
 
     /* --- Pool variables --- */
+    IPoolFactory public immutable poolFactory;
     ISuperToken public immutable token0;
     ISuperToken public immutable token1;
 
@@ -43,6 +44,7 @@ contract SuperApp is SuperAppBase {
     constructor() payable {
         (host, token0, token1, flowIn0, flowIn1) = IPoolFactory(msg.sender).parameters();
         assert(address(host) != address(0));
+        poolFactory = IPoolFactory(msg.sender);
 
         cfa = IConstantFlowAgreementV1(address(host.getAgreementClass(CFA_ID)));
         cfaV1 = CFAv1Library.InitData(host, cfa);
@@ -260,6 +262,8 @@ contract SuperApp is SuperAppBase {
         flow.user = getUserFromCtx(_ctx);
         flow.flowRate = getFlowRate(_superToken, flow.user);
 
+        poolFactory.addAccountPool(flow.user);
+
         //(uint112 _flowIn0, uint112 _flowIn1,) = getFlows(); // gas savings TODO: we can optimize here by loading storage vars into stack, but we also need to avoid stack too deep errors
 
         // rebalance
@@ -377,6 +381,8 @@ contract SuperApp is SuperAppBase {
         flow.user = getUserFromCtx(_ctx);
         flow.flowRate = getFlowRate(_superToken, flow.user);
         flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
+
+        poolFactory.removeAccountPool(flow.user, address(this));
 
         // rebalance
         if (address(_superToken) == address(token0)) {
