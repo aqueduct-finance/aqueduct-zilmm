@@ -19,11 +19,17 @@ describe("PoolFactory", () => {
 
         const AqueductToken = await ethers.getContractFactory("AqueductToken");
 
-        token0 = await AqueductToken.deploy(SUPERFLUID_HOST, AQUEDUCT_HOST);
+        token0 = await AqueductToken.deploy(
+            SUPERFLUID_HOST,
+            poolFactory.address
+        );
         await token0.deployed();
         await token0.initialize(FDAI_ADDRESS, 18, "Aqueduct Token 0", "AQUA0");
 
-        token1 = await AqueductToken.deploy(SUPERFLUID_HOST, AQUEDUCT_HOST);
+        token1 = await AqueductToken.deploy(
+            SUPERFLUID_HOST,
+            poolFactory.address
+        );
         await token1.deployed();
         await token1.initialize(FDAI_ADDRESS, 18, "Aqueduct Token 1", "AQUA1");
     });
@@ -39,6 +45,6 @@ describe("PoolFactory", () => {
             }
         );
         await pool.wait();
-        console.log("Pool deployed to: ", pool);
+        console.log("Pool deployed to: ", pool.to);
     });
 });

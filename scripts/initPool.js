@@ -1,13 +1,13 @@
 const hre = require("hardhat");
 
-const POOL_FACTORY = "0x7c2910bdE2E295789e52B0A574c37fe42Afcab70";
+const { poolFactoryAddress } = require("./../poolFactoryAddress.js");
 const { token0Address } = require("./../token0Address.js");
 const { token1Address } = require("./../token1Address.js");
 
 const main = async () => {
     const poolFactory = await hre.ethers.getContractAt(
         "PoolFactory",
-        POOL_FACTORY
+        poolFactoryAddress
     );
 
     console.log("Pool factory address: ", poolFactory.address);
@@ -18,11 +18,11 @@ const main = async () => {
         0,
         0,
         {
-            gasLimit: 1000000,
+            gasLimit: 2000000,
         }
     );
     await pool.wait();
-    console.log("Pool deployed to: ", pool);
+    console.log("Pool deployed to: ", pool.to);
 };
 
 const runMain = async () => {

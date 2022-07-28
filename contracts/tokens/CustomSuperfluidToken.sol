@@ -136,10 +136,8 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                     )
                 ).getAccountFlowInfo(this, account); 
 
-                int256 updatedAgreementDynamicBalance = agreementDynamicBalance;
-
                 int256 realtimeBalance = _poolFactory.realtimeBalanceOf(
-                    updatedAgreementDynamicBalance,
+                    agreementDynamicBalance,
                     address(this),
                     account,
                     timestamp,
