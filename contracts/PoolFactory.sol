@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
+import "hardhat/console.sol";
+
 import {ISuperfluid, ISuperApp} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import {SafeCast} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 
@@ -78,11 +80,29 @@ contract PoolFactory is IPoolFactory {
         uint256 _timestamp,
         uint256 _initialTimestamp
     ) external view returns (int256 realtimeBalance) {
+        console.log("6. Entered realtimeBalanceOf function in PoolFactory.sol");
+        console.log("_agreementDynamicBalance: ", uint256(_agreementDynamicBalance));
+        console.log("_token: ", _token);
+        console.log("_account: ", _account);
+        console.log("_timestamp: ", _timestamp);
+        console.log("_initialTimestamp: ", _initialTimestamp);
+
         AccountPoolList memory accountPools = accountPoolList[_account];
+
+        address firstPool = address(accountPools.pools[0]);
+        console.log("7. accountPools: ", firstPool);
+
         uint accountPoolsLength = accountPools.pools.length;
+        console.log("8. accountPoolsLength: ", accountPoolsLength);
+
+        // TODO: This array has a fixed length so this require statement will always pass
         require(accountPoolsLength > 0, "Aqueduct: NO_POOLS_ASSOCIATED");
         for (uint i = 0; i < accountPoolsLength; i++) {
+            console.log("9. Entered realtimeBalanceOf for loop in PoolFactory.sol");
+        
             int96 netFlowRate = accountPools.pools[i].getTwapNetFlowRate(_token, _account);
+            console.log("netFlowRate: ", uint96(netFlowRate));
+
             uint256 cumulativeDelta = accountPools.pools[i].getUserCumulativeDelta(_token, _account, _timestamp);
 
             // modify balance to include TWAP streams

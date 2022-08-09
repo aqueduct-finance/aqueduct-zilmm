@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPLv3
 pragma solidity ^0.8.14;
 
+import "hardhat/console.sol";
+
 import {ISuperfluid, ISuperAgreement, ISuperfluidGovernance, ISuperfluidToken, SafeCast, EventsEmitter, FixedSizeData} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
 import {IERC20} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import {ERC777Helper} from "@superfluid-finance/ethereum-contracts/contracts/libs/ERC777Helper.sol";
@@ -110,12 +112,14 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
             uint256 owedDeposit
         )
     {
+        console.log("3. Entered realtimeBalanceOf function in CustomSuperfluidToken.sol");
         availableBalance = _balances[account];
         ISuperAgreement[] memory activeAgreements = getAccountActiveAgreements(
             account
         );
         for (uint256 i = 0; i < activeAgreements.length; i++) {
             // get regular balance
+            console.log("4. Entered realtimeBalanceOf for loop in CustomSuperfluidToken.sol");
             (
                 int256 agreementDynamicBalance,
                 uint256 agreementDeposit,
@@ -134,7 +138,8 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                             )
                         )
                     )
-                ).getAccountFlowInfo(this, account); 
+                ).getAccountFlowInfo(this, account);
+                console.log("5. Get initialTimestamp from cfa in CustomSuperfluidToken.sol. initialTimestamp: ", initialTimestamp);
 
                 int256 realtimeBalance = _poolFactory.realtimeBalanceOf(
                     agreementDynamicBalance,
@@ -143,6 +148,7 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                     timestamp,
                     initialTimestamp
                 );
+                console.log("Retrieved realtimeBalance from PoolFactory.sol in CustomSuperfluidToken.sol");
 
                 agreementDynamicBalance = realtimeBalance;
 
@@ -197,6 +203,7 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
             uint256 timestamp
         )
     {
+        console.log("2. Entered realtimeBalanceOfNow function in CustomSuperfluidToken.sol");
         timestamp = _host.getNow();
         (availableBalance, deposit, owedDeposit) = realtimeBalanceOf(
             account,

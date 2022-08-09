@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
+import "hardhat/console.sol";
+
 import { UUPSProxiable } from "@superfluid-finance/ethereum-contracts/contracts/upgradability/UUPSProxiable.sol";
 import {
     ISuperfluid,
@@ -334,6 +336,7 @@ contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
         override
         returns(uint256 balance)
     {
+        console.log("1. Entered balanceOf function in AqueductToken.sol");
         // solhint-disable-next-line not-rely-on-time
         (int256 availableBalance, , ,) = super.realtimeBalanceOfNow(account);
         return availableBalance < 0 ? 0 : uint256(availableBalance);
