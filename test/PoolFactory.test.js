@@ -42,7 +42,7 @@ describe("PoolFactory", () => {
         testWalletSigner = await ethers.getSigner(TEST_WALLET_ADDRESS);
     });
 
-    it("Deploys new pool", async () => {
+    it("Deploys new pool and upgrades user tokens", async () => {
         const pool = await poolFactory.createPool(
             token0.address,
             token1.address,
@@ -62,7 +62,8 @@ describe("PoolFactory", () => {
             FDAI_ADDRESS
         );
 
-        // const balance = await daiContract.balanceOf(TEST_WALLET_ADDRESS);
+        const balance = await daiContract.balanceOf(TEST_WALLET_ADDRESS);
+        console.log("dai balance : ", balance);
 
         let amnt = "100000000000000000000"; // 100
         await daiContract
@@ -74,11 +75,13 @@ describe("PoolFactory", () => {
             .approve(token1.address, amnt);
         await token1.connect(testWalletSigner).upgrade(amnt);
 
-        const token0Balance = await token0
-            .connect(testWalletSigner)
-            .balanceOf(TEST_WALLET_ADDRESS);
-        console.log(token0Balance);
+        // TODO: cannot assert against the balance of token0 until a stream into a pool has been created, due to our realTimeBalanceOf function in PoolFactory.sol
+        // const token0Balance = await token0
+        //     .connect(testWalletSigner)
+        //     .balanceOf(TEST_WALLET_ADDRESS);
+        // console.log(token0Balance);
 
-        // const newBalance = await daiContract.balanceOf(TEST_WALLET_ADDRESS);
+        const newBalance = await daiContract.balanceOf(TEST_WALLET_ADDRESS);
+        console.log("new dai balance : ", newBalance);
     });
 });

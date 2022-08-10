@@ -80,6 +80,7 @@ contract PoolFactory is IPoolFactory {
         uint256 _timestamp,
         uint256 _initialTimestamp
     ) external view returns (int256 realtimeBalance) {
+        require(address(accountPoolList[_account].pools[0]) != address(0), "Aqueduct: MUST_STREAM_INTO_POOL_FIRST");
         console.log("6. Entered realtimeBalanceOf function in PoolFactory.sol");
         console.log("_agreementDynamicBalance: ", uint256(_agreementDynamicBalance));
         console.log("_token: ", _token);
@@ -95,8 +96,6 @@ contract PoolFactory is IPoolFactory {
         uint accountPoolsLength = accountPools.pools.length;
         console.log("8. accountPoolsLength: ", accountPoolsLength);
 
-        // TODO: This array has a fixed length so this require statement will always pass
-        require(accountPoolsLength > 0, "Aqueduct: NO_POOLS_ASSOCIATED");
         for (uint i = 0; i < accountPoolsLength; i++) {
             console.log("9. Entered realtimeBalanceOf for loop in PoolFactory.sol");
         
@@ -114,7 +113,7 @@ contract PoolFactory is IPoolFactory {
                 (int256(netFlowRate) * int256(cumulativeDelta)) /
                 2**112;
             
-            realtimeBalance = _agreementDynamicBalance;
+            realtimeBalance += _agreementDynamicBalance;
         }
     }
 
