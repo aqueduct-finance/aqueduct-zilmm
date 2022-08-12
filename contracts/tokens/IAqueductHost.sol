@@ -1,12 +1,11 @@
 pragma solidity ^0.8.0;
 
-import { ISuperToken } from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperToken.sol";
+import {ISuperToken} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperToken.sol";
 
 /**
  * @dev Interface of the Aqueduct host contract
  */
 interface IAqueductHost {
-
     /**
         @return cumulativeDelta computed as S - S0
     */
@@ -23,4 +22,13 @@ interface IAqueductHost {
         external
         view
         returns (int96 netFlowRate);
+
+    /**
+        @return reward a user's reward for the specific token at the given timestamp
+    */
+    function getUserReward(
+        address token,
+        address user,
+        uint256 timestamp
+    ) external view returns (int256 reward);
 }

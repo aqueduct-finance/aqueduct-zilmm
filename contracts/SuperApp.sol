@@ -6,11 +6,13 @@ import {SuperAppBase} from "@superfluid-finance/ethereum-contracts/contracts/app
 import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/apps/CFAv1Library.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
-import "./libraries/UQ112x112.sol";
+import "./libraries/UQ128x128.sol";
+import "./libraries/math.sol";
 import "./interfaces/IAqueductHost.sol";
+import "./interfaces/IAqueductToken.sol";
 
 contract SuperApp is SuperAppBase, IAqueductHost {
-    using UQ112x112 for uint224;
+    using UQ128x128 for uint256;
 
     /* --- Superfluid --- */
     using CFAv1Library for CFAv1Library.InitData;
@@ -22,11 +24,12 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     /* --- Pool variables --- */
     address public factory;
-    ISuperToken public token0;
-    ISuperToken public token1;
+    uint256 poolFee;
+    IAqueductToken public token0;
+    IAqueductToken public token1;
 
-    uint112 private flowIn0;
-    uint112 private flowIn1;
+    uint128 private flowIn0;
+    uint128 private flowIn1;
     uint32 private blockTimestampLast;
 
     uint256 public price0CumulativeLast;
@@ -34,12 +37,27 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     // map user address to their starting price cumulatives
     struct UserPriceCumulative {
-        int96 netFlowRate0;
-        int96 netFlowRate1;
+        int96 flowIn0;
+        int96 flowIn1;
+        int96 flowOut0;
+        int96 flowOut1;
         uint256 price0Cumulative;
         uint256 price1Cumulative;
+        uint256 fees0Cumulative;
+        uint256 fees1Cumulative;
     }
     mapping(address => UserPriceCumulative) private userPriceCumulatives;
+
+    // map user address to their reward percentage
+    struct UserRewardPercentage {
+        uint256 reward0Percentage;
+        uint256 reward1Percentage;
+    }
+    mapping(address => UserRewardPercentage) private userRewardPercentages;
+    uint256 private fees0CumulativeLast;
+    uint256 private fees1CumulativeLast;
+    uint256 private rewards0CumulativeLast;
+    uint256 private rewards1CumulativeLast;
 
     constructor(ISuperfluid host) payable {
         assert(address(host) != address(0));
@@ -58,16 +76,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     // called once by the factory at time of deployment
     function initialize(
-        ISuperToken _token0,
-        ISuperToken _token1,
-        uint112 in0,
-        uint112 in1
+        IAqueductToken _token0,
+        IAqueductToken _token1,
+        uint224 _poolFee
     ) external {
         require(msg.sender == factory, "FORBIDDEN"); // sufficient check
         token0 = _token0;
         token1 = _token1;
-        flowIn0 = in0;
-        flowIn1 = in1;
+        poolFee = _poolFee;
     }
 
     /* --- Helper functions --- */
@@ -90,7 +106,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     }
 
     /* Gets the incoming flowRate for a given supertoken/user */
-    function getFlowRate(ISuperToken token, address user)
+    function getFlowRateIn(ISuperToken token, address user)
         internal
         view
         returns (int96)
@@ -100,14 +116,51 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         return flowRate;
     }
 
+    /* Gets the outgoing flowRate for a given supertoken/user */
+    function getFlowRateOut(ISuperToken token, address user)
+        internal
+        view
+        returns (int96)
+    {
+        (, int96 flowRate, , ) = cfa.getFlow(token, address(this), user);
+
+        return flowRate;
+    }
+
+    /* Gets the fee percentage for a given supertoken/user */
+    function getFeePercentage(
+        int96 flowA,
+        int96 flowB,
+        uint128 poolFlowA,
+        uint128 poolFlowB
+    ) internal pure returns (uint256) {
+        // handle special case
+        if (flowB == 0 || poolFlowB == 0) {
+            return UQ128x128.Q128;
+        }
+
+        // TODO: check that int96 -> uint128 cast is safe - expected that a flow between sender and receiver will always be positive
+        uint256 userRatio = UQ128x128.encode(uint128(uint96(flowA))).uqdiv(
+            uint128(uint96(flowB))
+        );
+        uint256 poolRatio = UQ128x128.encode(poolFlowA).uqdiv(poolFlowB);
+
+        if ((userRatio + poolRatio) == 0) {
+            return UQ128x128.Q128;
+        } else {
+            return
+                math.difference(userRatio, poolRatio) / (userRatio + poolRatio);
+        }
+    }
+
     /* --- Pool functions --- */
 
     function getFlows()
         public
         view
         returns (
-            uint112 _flowIn0,
-            uint112 _flowIn1,
+            uint128 _flowIn0,
+            uint128 _flowIn1,
             uint32 _blockTimestampLast
         )
     {
@@ -133,15 +186,15 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     {
         uint32 timestamp32 = uint32(timestamp % 2**32);
         uint32 timeElapsed = timestamp32 - blockTimestampLast;
-        uint112 _flowIn0 = flowIn0;
-        uint112 _flowIn1 = flowIn1;
+        uint128 _flowIn0 = flowIn0;
+        uint128 _flowIn1 = flowIn1;
 
         pc0 = price0CumulativeLast;
         pc1 = price1CumulativeLast;
         if (_flowIn0 > 0 && _flowIn1 > 0) {
-            pc1 += (uint256(UQ112x112.encode(_flowIn1).uqdiv(_flowIn0)) *
+            pc1 += (uint256(UQ128x128.encode(_flowIn1).uqdiv(_flowIn0)) *
                 timeElapsed);
-            pc0 += (uint256(UQ112x112.encode(_flowIn0).uqdiv(_flowIn1)) *
+            pc0 += (uint256(UQ128x128.encode(_flowIn0).uqdiv(_flowIn1)) *
                 timeElapsed);
         }
     }
@@ -154,6 +207,29 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         (pc0, pc1) = getCumulativesAtTime(block.timestamp);
     }
 
+    function getFeeCumulativesAtTime(uint256 timestamp)
+        internal
+        view
+        returns (uint256 fc0, uint256 fc1)
+    {
+        (uint256 pc0, uint256 pc1) = getCumulativesAtTime(timestamp);
+
+        fc0 = UQ128x128.decode(
+            UQ128x128.decode(fees0CumulativeLast * poolFee) * pc0
+        );
+        fc1 = UQ128x128.decode(
+            UQ128x128.decode(fees0CumulativeLast * poolFee) * pc1
+        );
+    }
+
+    function getRealTimeFeeCumulatives()
+        external
+        view
+        returns (uint256 fc0, uint256 fc1)
+    {
+        (fc0, fc1) = getFeeCumulativesAtTime(block.timestamp);
+    }
+
     function getUserCumulativeDelta(
         address token,
         address user,
@@ -162,12 +238,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         if (token == address(token0)) {
             (uint256 S, ) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price0Cumulative;
-            cumulativeDelta = UQ112x112.decode(S - S0);
             cumulativeDelta = S - S0;
         } else if (token == address(token1)) {
             (, uint256 S) = getCumulativesAtTime(timestamp);
             uint256 S0 = userPriceCumulatives[user].price1Cumulative;
-            cumulativeDelta = UQ112x112.decode(S - S0);
             cumulativeDelta = S - S0;
         }
     }
@@ -180,87 +254,312 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         cumulativeDelta = getUserCumulativeDelta(token, user, block.timestamp);
     }
 
+    event userReward(
+        uint256 feesTotal,
+        uint256 feesInitial,
+        uint256 rewardPercentage,
+        int96 flowIn,
+        uint256 poolFlowIn,
+        int256 tokenType
+    );
+
+    function getUserReward(
+        address token,
+        address user,
+        uint256 timestamp
+    ) public view returns (int256 reward) {
+        if (user == address(this)) {
+            reward = 0;
+            /*
+            temp comment out:
+
+            if (token == address(token0)) {
+                (uint256 feesTotal, ) = getFeeCumulativesAtTime(timestamp);
+                uint256 feesInitial = userPriceCumulatives[user]
+                    .fees0Cumulative;
+                return
+                    int256(
+                        UQ128x128.decode(
+                            (feesTotal - feesInitial) * rewards0CumulativeLast
+                        )
+                    ) * -1;
+            } else if (token == address(token1)) {
+                (, uint256 feesTotal) = getFeeCumulativesAtTime(timestamp);
+                uint256 feesInitial = userPriceCumulatives[user]
+                    .fees1Cumulative;
+                return
+                    int256(
+                        UQ128x128.decode(
+                            (feesTotal - feesInitial) * rewards1CumulativeLast
+                        )
+                    ) * -1;
+            }
+            */
+        } else {
+            if (token == address(token0)) {
+                if (flowIn0 > 0) {
+                    (uint256 feesTotal, ) = getFeeCumulativesAtTime(timestamp);
+                    uint256 feesInitial = userPriceCumulatives[user]
+                        .fees0Cumulative;
+                    reward = int256(
+                        UQ128x128.decode(
+                            ((userRewardPercentages[user].reward0Percentage *
+                                uint256(
+                                    int256(userPriceCumulatives[user].flowIn0)
+                                )) / flowIn0) * (feesTotal - feesInitial)
+                        )
+                    );
+                }
+            } else if (token == address(token1)) {
+                if (flowIn1 > 0) {
+                    (, uint256 feesTotal) = getFeeCumulativesAtTime(timestamp);
+                    uint256 feesInitial = userPriceCumulatives[user]
+                        .fees1Cumulative;
+                    reward = int256(
+                        UQ128x128.decode(
+                            ((userRewardPercentages[user].reward1Percentage *
+                                uint256(
+                                    int256(userPriceCumulatives[user].flowIn1)
+                                )) / flowIn1) * (feesTotal - feesInitial)
+                        )
+                    );
+                }
+            }
+        }
+    }
+
+    function getRealTimeUserReward(address token, address user)
+        external
+        view
+        returns (int256 reward)
+    {
+        reward = getUserReward(token, user, block.timestamp);
+    }
+
     function getTwapNetFlowRate(address token, address user)
         external
         view
         returns (int96 netFlowRate)
     {
         if (token == address(token0)) {
-            netFlowRate = userPriceCumulatives[user].netFlowRate0;
-        } else if (token == address(token1)) {
-            netFlowRate = userPriceCumulatives[user].netFlowRate1;
+            netFlowRate = userPriceCumulatives[user].flowOut0;
+        } else {
+            netFlowRate = userPriceCumulatives[user].flowOut1;
         }
-    }
-
-    function safeUnsignedAdd(uint112 a, int96 b)
-        internal
-        pure
-        returns (uint112)
-    {
-        // TODO: this can still technically underflow, add try/catch?
-        // This is used for computing pool net flow, which should never be < 0
-        return b < 0 ? a - uint96(b * -1) : a + uint96(b);
     }
 
     // update flow reserves and, on the first call per block, price accumulators
     function _update(
-        uint112 _flowIn0,
-        uint112 _flowIn1,
-        int96 relFlow0,
-        int96 relFlow1,
+        uint128 _flowIn0,
+        uint128 _flowIn1,
+        int96 relFlowIn0,
+        int96 relFlowIn1,
+        int96 relFlowOut0,
+        int96 relFlowOut1,
         address user
     ) private {
         uint32 blockTimestamp = uint32(block.timestamp % 2**32);
         uint32 timeElapsed = blockTimestamp - blockTimestampLast;
 
-        if (flowIn0 != 0 && flowIn1 != 0) {
+        if (_flowIn0 != 0 && _flowIn1 != 0) {
             if (timeElapsed <= 0) {
                 timeElapsed = 0;
             }
 
             price1CumulativeLast +=
-                uint256(UQ112x112.encode(flowIn1).uqdiv(flowIn0)) *
+                uint256(UQ128x128.encode(_flowIn1).uqdiv(_flowIn0)) *
                 timeElapsed;
             price0CumulativeLast +=
-                uint256(UQ112x112.encode(flowIn0).uqdiv(flowIn1)) *
+                uint256(UQ128x128.encode(_flowIn0).uqdiv(_flowIn1)) *
                 timeElapsed;
 
-            // update user's price initial price cumulative
-            if (relFlow0 != 0) {
+            // update user and pool initial price cumulatives
+            if (relFlowOut0 != 0) {
                 userPriceCumulatives[user]
-                    .price1Cumulative = price1CumulativeLast;
+                    .price0Cumulative = price0CumulativeLast;
+                userPriceCumulatives[address(this)]
+                    .price0Cumulative = price0CumulativeLast;
                 userPriceCumulatives[address(this)]
                     .price1Cumulative = price1CumulativeLast;
             }
-            if (relFlow1 != 0) {
+            if (relFlowOut1 != 0) {
                 userPriceCumulatives[user]
-                    .price0Cumulative = price0CumulativeLast;
+                    .price1Cumulative = price1CumulativeLast;
                 userPriceCumulatives[address(this)]
                     .price0Cumulative = price0CumulativeLast;
+                userPriceCumulatives[address(this)]
+                    .price1Cumulative = price1CumulativeLast;
             }
         }
 
-        if (relFlow0 != 0) {
-            userPriceCumulatives[user].netFlowRate1 += relFlow0;
-            userPriceCumulatives[address(this)].netFlowRate1 -= relFlow0;
+        if (relFlowIn0 != 0) {
+            userPriceCumulatives[user].flowIn0 += relFlowIn0;
         }
-        if (relFlow1 != 0) {
-            userPriceCumulatives[user].netFlowRate0 += relFlow1;
-            userPriceCumulatives[address(this)].netFlowRate0 -= relFlow1;
+        if (relFlowIn1 != 0) {
+            userPriceCumulatives[user].flowIn1 += relFlowIn1;
         }
-        
-        flowIn0 = safeUnsignedAdd(flowIn0, relFlow0);
-        flowIn1 = safeUnsignedAdd(flowIn1, relFlow1);
+        if (relFlowOut0 != 0) {
+            userPriceCumulatives[user].flowOut0 += relFlowOut0;
+            userPriceCumulatives[address(this)].flowOut0 -= relFlowOut0;
+        }
+        if (relFlowOut1 != 0) {
+            userPriceCumulatives[user].flowOut1 += relFlowOut1;
+            userPriceCumulatives[address(this)].flowOut1 -= relFlowOut1;
+        }
+
+        flowIn0 = math.safeUnsignedAdd(_flowIn0, relFlowIn0);
+        flowIn1 = math.safeUnsignedAdd(_flowIn1, relFlowIn1);
 
         blockTimestampLast = blockTimestamp;
+    }
+
+    // fees are dependent upon flowRates of both tokens, update both at once
+    function _updateFees(
+        uint128 _flowIn0,
+        uint128 _flowIn1,
+        int96 previousUserFlowIn0,
+        int96 previousUserFlowIn1,
+        int96 userFlowIn0,
+        int96 userFlowIn1,
+        address user
+    ) private returns (int96 userFlowOut0, int96 userFlowOut1) {
+        // remove previous rewards from reward accumulators
+        /*
+        if (_flowIn0 > 0) {
+            rewards0CumulativeLast +=
+                (userRewardPercentages[user].reward0Percentage *
+                    uint256(int256(previousUserFlowIn0))) /
+                _flowIn0;
+        }
+        if (_flowIn1 > 0) {
+            rewards1CumulativeLast +=
+                (userRewardPercentages[user].reward1Percentage *
+                    uint256(int256(previousUserFlowIn1))) /
+                _flowIn1;
+        }
+        */
+
+        // calculate expected pool reserves
+        _flowIn0 = math.safeUnsignedAdd(
+            _flowIn0,
+            userFlowIn0 - previousUserFlowIn0
+        );
+        _flowIn1 = math.safeUnsignedAdd(
+            _flowIn1,
+            userFlowIn1 - previousUserFlowIn1
+        );
+
+        // calculate fee percentages
+        uint256 feePercentage0 = getFeePercentage(
+            userFlowIn0,
+            userFlowIn1,
+            _flowIn0,
+            _flowIn1
+        );
+        uint256 feeMultiplier0 = UQ128x128.Q128 -
+            ((feePercentage0 * poolFee) / UQ128x128.Q128);
+
+        uint256 feePercentage1 = getFeePercentage(
+            userFlowIn1,
+            userFlowIn0,
+            _flowIn1,
+            _flowIn0
+        );
+        uint256 feeMultiplier1 = UQ128x128.Q128 -
+            ((feePercentage1 * poolFee) / UQ128x128.Q128);
+
+        // TODO: settle fees first?
+
+        // remove previous fees from fee accumulators
+        // TODO: underflow is technically possible here, add checks?
+        // not sure if this is needed
+        /*
+        fees0CumulativeLast -= UQ128x128.decode(
+            uint96(previousUserFlowIn0) *
+            (UQ128x128.Q128 - userRewardPercentages[user].reward0Percentage)
+        );
+        fees1CumulativeLast -= UQ128x128.decode(
+            uint96(previousUserFlowIn1) *
+            (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
+        );
+        */
+
+        // set both reward percentages
+        userRewardPercentages[user].reward0Percentage = (UQ128x128.Q128 -
+            feePercentage0);
+        userRewardPercentages[user].reward1Percentage = (UQ128x128.Q128 -
+            feePercentage1);
+
+        // update fee accumulators
+        fees0CumulativeLast += UQ128x128.decode(
+            uint96(userFlowIn0) *
+                (UQ128x128.Q128 - userRewardPercentages[user].reward0Percentage)
+        );
+        fees1CumulativeLast += UQ128x128.decode(
+            uint96(userFlowIn1) *
+                (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
+        );
+
+        // update reward accumulators
+        // temp comment out
+        /*
+        if (_flowIn0 > 0) {
+            rewards0CumulativeLast +=
+                (userRewardPercentages[user].reward0Percentage *
+                    uint256(int256(userFlowIn0))) /
+                _flowIn0;
+        }
+        if (_flowIn1 > 0) {
+            rewards1CumulativeLast +=
+                (userRewardPercentages[user].reward1Percentage *
+                    uint256(int256(userFlowIn1))) /
+                _flowIn1;
+        }
+        */
+
+        // set user and pool fee cumulatives
+        userPriceCumulatives[user].fees0Cumulative = UQ128x128.decode(
+            UQ128x128.decode(fees0CumulativeLast * poolFee) *
+                price0CumulativeLast
+        );
+        //userPriceCumulatives[address(this)]
+        //.fees0Cumulative = userPriceCumulatives[user].fees0Cumulative;
+        userPriceCumulatives[user].fees1Cumulative = UQ128x128.decode(
+            UQ128x128.decode(fees1CumulativeLast * poolFee) *
+                price1CumulativeLast
+        );
+        //userPriceCumulatives[address(this)]
+        //.fees1Cumulative = userPriceCumulatives[user].fees1Cumulative;
+
+        // calculate outflows
+        // TODO: check for overflow
+        userFlowOut0 = int96(
+            int256(
+                UQ128x128.decode(feeMultiplier1 * uint256(uint96(userFlowIn1)))
+            )
+        );
+        userFlowOut1 = int96(
+            int256(
+                UQ128x128.decode(feeMultiplier0 * uint256(uint96(userFlowIn0)))
+            )
+        );
     }
 
     /* --- Superfluid callbacks --- */
 
     struct Flow {
         address user;
-        int96 flowRate;
-        int96 netFlowRate;
+        int96 userFlowIn0;
+        int96 userFlowIn1;
+        int96 userFlowOut0;
+        int96 userFlowOut1;
+        int96 previousUserFlowOut0;
+        int96 previousUserFlowOut1;
+        int96 previousUserFlowIn;
+        uint256 initialTimestamp0;
+        uint256 initialTimestamp1;
+        bool forceSettleUserBalances;
+        bool forceSettlePoolBalances;
     }
 
     //onlyExpected(_agreementClass)
@@ -269,7 +568,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         address, //_agreementClass,
         bytes32, //_agreementId
         bytes calldata, //_agreementData
-        bytes calldata, //_cbdata
+        bytes calldata, //_cbdata,
         bytes calldata _ctx
     ) external override onlyHost returns (bytes memory newCtx) {
         require(
@@ -281,33 +580,90 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
-        flow.flowRate = getFlowRate(_superToken, flow.user);
+        //flow.oppositeToken = getOppositeToken(_superToken);
 
-        //(uint112 _flowIn0, uint112 _flowIn1,) = getFlows(); // gas savings TODO: we can optimize here by loading storage vars into stack, but we also need to avoid stack too deep errors
+        flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
+        flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
 
-        // rebalance
+        flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
+        flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
+
         if (address(_superToken) == address(token0)) {
-            _update(flowIn0, flowIn1, flow.flowRate, 0, flow.user);
+            (flow.userFlowOut0, flow.userFlowOut1) = _updateFees(
+                flowIn0,
+                flowIn1,
+                0,
+                flow.userFlowIn1,
+                flow.userFlowIn0,
+                flow.userFlowIn1,
+                flow.user
+            );
         } else {
-            _update(flowIn0, flowIn1, 0, flow.flowRate, flow.user);
+            (flow.userFlowOut0, flow.userFlowOut1) = _updateFees(
+                flowIn0,
+                flowIn1,
+                flow.userFlowIn0,
+                0,
+                flow.userFlowIn0,
+                flow.userFlowIn1,
+                flow.user
+            );
         }
 
-        // redirect stream of opposite token back to user and return new context
-        // TODO: subtract fee from outgoing flow
-        newCtx = cfaV1.createFlowWithCtx(
-            _ctx,
-            flow.user,
-            getOppositeToken(_superToken),
-            flow.flowRate
+        // update other stream if fees were updated
+        if (address(_superToken) == address(token0)) {
+            newCtx = cfaV1.createFlowWithCtx(
+                _ctx,
+                flow.user,
+                token1,
+                flow.userFlowOut1
+            );
+            if (flow.previousUserFlowOut0 != flow.userFlowOut0) {
+                newCtx = cfaV1.updateFlowWithCtx(
+                    newCtx,
+                    flow.user,
+                    _superToken,
+                    flow.userFlowOut0
+                );
+            }
+        } else {
+            newCtx = cfaV1.createFlowWithCtx(
+                _ctx,
+                flow.user,
+                token0,
+                flow.userFlowOut0
+            );
+            if (flow.previousUserFlowOut1 != flow.userFlowOut1) {
+                newCtx = cfaV1.updateFlowWithCtx(
+                    newCtx,
+                    flow.user,
+                    _superToken,
+                    flow.userFlowOut1
+                );
+            }
+        }
+
+        // rebalance
+        _update(
+            flowIn0,
+            flowIn1,
+            address(_superToken) == address(token0)
+                ? flow.userFlowIn0
+                : int96(0),
+            address(_superToken) == address(token1)
+                ? flow.userFlowIn1
+                : int96(0),
+            flow.userFlowOut0 - flow.previousUserFlowOut0,
+            flow.userFlowOut1 - flow.previousUserFlowOut1,
+            flow.user
         );
-        //newCtx = _ctx;
     }
 
     function beforeAgreementUpdated(
         ISuperToken _superToken,
-        address, /*agreementClass*/
-        bytes32, /*agreementId*/
-        bytes calldata, /*agreementData*/
+        address, // agreementClass
+        bytes32, // agreementId
+        bytes calldata, // agreementData
         bytes calldata _ctx
     )
         external
@@ -315,13 +671,24 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         virtual
         override
         returns (
-            bytes memory /*cbdata*/
+            bytes memory // cbdata
         )
     {
-        // keep track of old flowRate to calc net change in afterAgreementUpdated
+        // keep track of old flowRate to calc net change in afterAgreementTerminated
         address user = getUserFromCtx(_ctx);
-        int96 flowRate = getFlowRate(_superToken, user);
-        return abi.encode(flowRate);
+        int96 flowRate = getFlowRateIn(_superToken, user);
+
+        // get previous initial flow timestamps (in case balance needs to be manually settled)
+        (uint256 initialTimestamp0, , , ) = cfa.getAccountFlowInfo(
+            token0,
+            user
+        );
+        (uint256 initialTimestamp1, , , ) = cfa.getAccountFlowInfo(
+            token1,
+            user
+        );
+
+        return abi.encode(flowRate, initialTimestamp0, initialTimestamp1);
     }
 
     // onlyExpected(_agreementClass)
@@ -342,22 +709,106 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
-        flow.flowRate = getFlowRate(_superToken, flow.user);
-        flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
 
-        // rebalance
-        if (address(_superToken) == address(token0)) {
-            _update(flowIn0, flowIn1, flow.netFlowRate, 0, flow.user);
-        } else {
-            _update(flowIn0, flowIn1, 0, flow.netFlowRate, flow.user);
+        flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
+        flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
+
+        flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
+        flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
+
+        (
+            flow.previousUserFlowIn,
+            flow.initialTimestamp0,
+            flow.initialTimestamp1
+        ) = abi.decode(_cbdata, (int96, uint256, uint256));
+
+        // settle balances if necessary
+        flow.forceSettleUserBalances =
+            userPriceCumulatives[flow.user].flowOut0 ==
+            userPriceCumulatives[flow.user].flowOut1;
+        if (flow.forceSettleUserBalances) {
+            token0.settleTwapBalance(flow.user, flow.initialTimestamp0);
+            token1.settleTwapBalance(flow.user, flow.initialTimestamp1);
         }
 
-        newCtx = cfaV1.updateFlowWithCtx(
-            _ctx,
-            flow.user,
-            getOppositeToken(_superToken),
-            flow.flowRate
+        // update fees
+        if (address(_superToken) == address(token0)) {
+            (flow.userFlowOut0, flow.userFlowOut1) = _updateFees(
+                flowIn0,
+                flowIn1,
+                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
+                flow.userFlowIn1,
+                flow.userFlowIn0,
+                flow.userFlowIn1,
+                flow.user
+            );
+        } else {
+            (flow.userFlowOut0, flow.userFlowOut1) = _updateFees(
+                flowIn0,
+                flowIn1,
+                flow.userFlowIn0,
+                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
+                flow.userFlowIn0,
+                flow.userFlowIn1,
+                flow.user
+            );
+        }
+
+        // update flows
+        if (address(_superToken) == address(token0)) {
+            newCtx = cfaV1.updateFlowWithCtx(
+                _ctx,
+                flow.user,
+                token1,
+                flow.userFlowOut1
+            );
+            if (flow.previousUserFlowOut0 != flow.userFlowOut0) {
+                newCtx = cfaV1.updateFlowWithCtx(
+                    newCtx,
+                    flow.user,
+                    _superToken,
+                    flow.userFlowOut0
+                );
+            }
+        } else {
+            newCtx = cfaV1.updateFlowWithCtx(
+                _ctx,
+                flow.user,
+                token0,
+                flow.userFlowOut0
+            );
+            if (flow.previousUserFlowOut1 != flow.userFlowOut1) {
+                newCtx = cfaV1.updateFlowWithCtx(
+                    newCtx,
+                    flow.user,
+                    _superToken,
+                    flow.userFlowOut1
+                );
+            }
+        }
+
+        // rebalance
+        _update(
+            flowIn0,
+            flowIn1,
+            address(_superToken) == address(token0)
+                ? flow.userFlowIn0 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+                : int96(0),
+            address(_superToken) == address(token1)
+                ? flow.userFlowIn1 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+                : int96(0),
+            flow.userFlowOut0 - flow.previousUserFlowOut0,
+            flow.userFlowOut1 - flow.previousUserFlowOut1,
+            flow.user
         );
+
+        // update cumualtives if necessary
+        if (flow.forceSettleUserBalances) {
+            userPriceCumulatives[flow.user]
+                .price0Cumulative = price0CumulativeLast;
+            userPriceCumulatives[flow.user]
+                .price1Cumulative = price1CumulativeLast;
+        }
     }
 
     function beforeAgreementTerminated(
@@ -377,8 +828,19 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     {
         // keep track of old flowRate to calc net change in afterAgreementTerminated
         address user = getUserFromCtx(_ctx);
-        int96 flowRate = getFlowRate(_superToken, user);
-        return abi.encode(flowRate);
+        int96 flowRate = getFlowRateIn(_superToken, user);
+
+        // get previous initial flow timestamps (in case balance needs to be manually settled)
+        (uint256 initialTimestamp0, , , ) = cfa.getAccountFlowInfo(
+            token0,
+            user
+        );
+        (uint256 initialTimestamp1, , , ) = cfa.getAccountFlowInfo(
+            token1,
+            user
+        );
+
+        return abi.encode(flowRate, initialTimestamp0, initialTimestamp1);
     }
 
     function afterAgreementTerminated(
@@ -398,22 +860,106 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
-        flow.flowRate = getFlowRate(_superToken, flow.user);
-        flow.netFlowRate = flow.flowRate - abi.decode(_cbdata, (int96));
 
-        // rebalance
-        if (address(_superToken) == address(token0)) {
-            _update(flowIn0, flowIn1, flow.netFlowRate, 0, flow.user);
-        } else {
-            _update(flowIn0, flowIn1, 0, flow.netFlowRate, flow.user);
+        flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
+        flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
+
+        flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
+        flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
+
+        (
+            flow.previousUserFlowIn,
+            flow.initialTimestamp0,
+            flow.initialTimestamp1
+        ) = abi.decode(_cbdata, (int96, uint256, uint256));
+
+        // settle balances if necessary
+        flow.forceSettleUserBalances =
+            userPriceCumulatives[flow.user].flowOut0 ==
+            userPriceCumulatives[flow.user].flowOut1;
+        if (flow.forceSettleUserBalances) {
+            token0.settleTwapBalance(flow.user, flow.initialTimestamp0);
+            token1.settleTwapBalance(flow.user, flow.initialTimestamp1);
         }
 
-        newCtx = cfaV1.deleteFlowWithCtx(
-            _ctx,
-            address(this),
-            flow.user,
-            getOppositeToken(_superToken)
+        // update fees
+        if (address(_superToken) == address(token0)) {
+            (flow.userFlowOut0, flow.userFlowOut1) = _updateFees(
+                flowIn0,
+                flowIn1,
+                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
+                flow.userFlowIn1,
+                flow.userFlowIn0,
+                flow.userFlowIn1,
+                flow.user
+            );
+        } else {
+            (flow.userFlowOut0, flow.userFlowOut1) = _updateFees(
+                flowIn0,
+                flowIn1,
+                flow.userFlowIn0,
+                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
+                flow.userFlowIn0,
+                flow.userFlowIn1,
+                flow.user
+            );
+        }
+
+        // update flows
+        if (address(_superToken) == address(token0)) {
+            newCtx = cfaV1.deleteFlowWithCtx(
+                _ctx,
+                address(this),
+                flow.user,
+                token1
+            );
+            if (flow.previousUserFlowOut0 != flow.userFlowOut0) {
+                newCtx = cfaV1.updateFlowWithCtx(
+                    newCtx,
+                    flow.user,
+                    _superToken,
+                    flow.userFlowOut0
+                );
+            }
+        } else {
+            newCtx = cfaV1.deleteFlowWithCtx(
+                _ctx,
+                address(this),
+                flow.user,
+                token0
+            );
+            if (flow.previousUserFlowOut1 != flow.userFlowOut1) {
+                newCtx = cfaV1.updateFlowWithCtx(
+                    newCtx,
+                    flow.user,
+                    _superToken,
+                    flow.userFlowOut1
+                );
+            }
+        }
+
+        // rebalance
+        _update(
+            flowIn0,
+            flowIn1,
+            address(_superToken) == address(token0)
+                ? flow.userFlowIn0 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+                : int96(0),
+            address(_superToken) == address(token1)
+                ? flow.userFlowIn1 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+                : int96(0),
+            flow.userFlowOut0 - flow.previousUserFlowOut0,
+            flow.userFlowOut1 - flow.previousUserFlowOut1,
+            flow.user
         );
+
+        // update cumualtives if necessary
+        if (flow.forceSettleUserBalances) {
+            userPriceCumulatives[flow.user]
+                .price0Cumulative = price0CumulativeLast;
+            userPriceCumulatives[flow.user]
+                .price1Cumulative = price1CumulativeLast;
+        }
     }
 
     function _isCFAv1(address agreementClass) private view returns (bool) {

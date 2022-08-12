@@ -6,6 +6,7 @@ import {IERC20} from "@superfluid-finance/ethereum-contracts/contracts/interface
 import {ERC777Helper} from "@superfluid-finance/ethereum-contracts/contracts/libs/ERC777Helper.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
+import "../libraries/UQ128x128.sol";
 import "./IAqueductHost.sol";
 
 /**
@@ -147,14 +148,18 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                     timestamp
                 );
 
-                // modify balance to include TWAP streams
-                agreementDynamicBalance -=
-                    int256(twapNetFlowRate) *
-                    (timestamp - initialTimestamp).toInt256();
+                // modify balance to include TWAP streams (avoid special case where ∆C is 0)
+                if (cumulativeDelta > 0) {
+                    agreementDynamicBalance -=
+                        int256(twapNetFlowRate) *
+                        (timestamp - initialTimestamp).toInt256();
 
-                agreementDynamicBalance +=
-                    (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
-                    2**112;
+                    agreementDynamicBalance +=
+                        (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
+                        int256(UQ128x128.Q128);
+
+                    agreementDynamicBalance += _aqueductHost.getUserReward(address(this), account, timestamp);
+                }
             }
 
             deposit = deposit + agreementDeposit;
@@ -170,24 +175,6 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                         : 0
                 ).toInt256();
         }
-    }
-
-    // not currently used
-    function twapBalanceOf(
-        address account,
-        uint256 mostRecentCumulative,
-        uint256 userEnterPoolCumulative
-    ) public view returns (uint256 balance) {
-        // formula: B=r*(S-S0)
-        // Where B is the balance and r is the flowrate
-        // Where S is most recent cumulative
-        // Where S0 is recorded cumulative from when user entered the pool
-
-        uint96 flowRate; // call getAgreementStateSlot here. We will need to decode the result
-
-        balance =
-            uint256(uint96(flowRate)) *
-            (mostRecentCumulative - userEnterPoolCumulative);
     }
 
     /// @dev ISuperfluidToken.realtimeBalanceOfNow implementation
@@ -409,7 +396,6 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
         // forced to make some odd modifications here
         // TODO: check these calculations / find better way to do this
-
         uint256 timestamp = block.timestamp; // TODO: check that this timestamp is always valid
 
         // get active agreements and see which one is calling settleBalance
@@ -424,49 +410,66 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
                 // some bad logic to check if the delta came from CFA
                 if (agreementDynamicBalance == delta) {
-                    // copy over same logic from realTimeBalanceOf:
-                    // get account's flow timestamp
-                    (uint256 initialTimestamp, , , ) = IConstantFlowAgreementV1(
-                        address(
-                            _host.getAgreementClass(
-                                keccak256(
-                                    "org.superfluid-finance.agreements.ConstantFlowAgreement.v1"
-                                )
-                            )
-                        )
-                    ).getAccountFlowInfo(this, account);
-
-                    // get TWAP net flow
-                    int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
-                        address(this),
-                        account
-                    );
-                    uint256 cumulativeDelta = _aqueductHost
-                        .getUserCumulativeDelta(
-                            address(this),
-                            account,
-                            timestamp
-                        );
-
-                    // modify balance to include TWAP streams
-                    agreementDynamicBalance -=
-                        int256(twapNetFlowRate) *
-                        (timestamp - initialTimestamp).toInt256();
-
-                    agreementDynamicBalance +=
-                        (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
-                        2**112;
-
-                    _settleBalance(account, agreementDynamicBalance);
+                    (uint256 initialTimestamp, , , ) = IConstantFlowAgreementV1(address(activeAgreements[i])).getAccountFlowInfo(this, account);
+                    
+                    // settle twap balance
+                    settleTwapBalance(account, initialTimestamp);
                 } else {
+                    //emit settledBalance(delta, account, 4321);
                     _settleBalance(account, delta);
                 }
             }
         }
     }
 
+    function settleTwapBalance(address account, uint256 initialTimestamp) public onlyAqueductHost {
+        // get cfa agreement
+        IConstantFlowAgreementV1 cfaV1 = IConstantFlowAgreementV1(
+            address(
+                _host.getAgreementClass(
+                    keccak256(
+                        "org.superfluid-finance.agreements.ConstantFlowAgreement.v1"
+                    )
+                )
+            )
+        );
+
+        // copy over same logic from realTimeBalanceOf:
+        uint256 timestamp = block.timestamp;
+        (int256 agreementDynamicBalance, , ) = cfaV1.realtimeBalanceOf(this, account, timestamp);
+
+        // get TWAP net flow
+        int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
+            address(this),
+            account
+        );
+        uint256 cumulativeDelta = _aqueductHost.getUserCumulativeDelta(
+            address(this),
+            account,
+            timestamp
+        );
+
+        // modify balance to include TWAP streams (avoid special case where ∆C is 0)
+        if (cumulativeDelta > 0) {
+            agreementDynamicBalance -=
+                int256(twapNetFlowRate) *
+                (timestamp - initialTimestamp).toInt256();
+
+            agreementDynamicBalance +=
+                (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
+                int256(UQ128x128.Q128);
+
+            agreementDynamicBalance += _aqueductHost.getUserReward(address(this), account, timestamp);
+        }
+
+        _settleBalance(account, agreementDynamicBalance);
+    }
+
+    event simpleSettledBalance(int256 balance, int256 delta);
     function _settleBalance(address account, int256 delta) internal {
+        emit simpleSettledBalance(_balances[account], delta);
         _balances[account] = _balances[account] + delta;
+        emit simpleSettledBalance(_balances[account], delta);
     }
 
     /// @dev ISuperfluidToken.makeLiquidationPayoutsV2 implementation
@@ -551,6 +554,14 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
         require(
             address(_host) == msg.sender,
             "SuperfluidToken: Only host contract allowed"
+        );
+        _;
+    }
+
+    modifier onlyAqueductHost() {
+        require(
+            address(_aqueductHost) == msg.sender || _host.isAgreementClassListed(ISuperAgreement(msg.sender)),
+            "SuperfluidToken: Only aqueduct host contract allowed"
         );
         _;
     }
