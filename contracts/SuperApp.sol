@@ -218,7 +218,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             UQ128x128.decode(fees0CumulativeLast * poolFee) * pc0
         );
         fc1 = UQ128x128.decode(
-            UQ128x128.decode(fees0CumulativeLast * poolFee) * pc1
+            UQ128x128.decode(fees1CumulativeLast * poolFee) * pc1
         );
     }
 
@@ -269,15 +269,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         uint256 timestamp
     ) public view returns (int256 reward) {
         if (user == address(this)) {
-            reward = 0;
-            /*
-            temp comment out:
-
+            //reward = 0;
+            
+            // prev: temp comment out:
             if (token == address(token0)) {
                 (uint256 feesTotal, ) = getFeeCumulativesAtTime(timestamp);
                 uint256 feesInitial = userPriceCumulatives[user]
                     .fees0Cumulative;
-                return
+                reward =
                     int256(
                         UQ128x128.decode(
                             (feesTotal - feesInitial) * rewards0CumulativeLast
@@ -287,14 +286,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 (, uint256 feesTotal) = getFeeCumulativesAtTime(timestamp);
                 uint256 feesInitial = userPriceCumulatives[user]
                     .fees1Cumulative;
-                return
+                reward =
                     int256(
                         UQ128x128.decode(
                             (feesTotal - feesInitial) * rewards1CumulativeLast
                         )
                     ) * -1;
             }
-            */
+            
         } else {
             if (token == address(token0)) {
                 if (flowIn0 > 0) {
@@ -424,20 +423,18 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         address user
     ) private returns (int96 userFlowOut0, int96 userFlowOut1) {
         // remove previous rewards from reward accumulators
-        /*
         if (_flowIn0 > 0) {
-            rewards0CumulativeLast +=
+            rewards0CumulativeLast -=
                 (userRewardPercentages[user].reward0Percentage *
                     uint256(int256(previousUserFlowIn0))) /
                 _flowIn0;
         }
         if (_flowIn1 > 0) {
-            rewards1CumulativeLast +=
+            rewards1CumulativeLast -=
                 (userRewardPercentages[user].reward1Percentage *
                     uint256(int256(previousUserFlowIn1))) /
                 _flowIn1;
         }
-        */
 
         // calculate expected pool reserves
         _flowIn0 = math.safeUnsignedAdd(
@@ -472,8 +469,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
         // remove previous fees from fee accumulators
         // TODO: underflow is technically possible here, add checks?
-        // not sure if this is needed
-        /*
         fees0CumulativeLast -= UQ128x128.decode(
             uint96(previousUserFlowIn0) *
             (UQ128x128.Q128 - userRewardPercentages[user].reward0Percentage)
@@ -482,7 +477,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             uint96(previousUserFlowIn1) *
             (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
         );
-        */
 
         // set both reward percentages
         userRewardPercentages[user].reward0Percentage = (UQ128x128.Q128 -
@@ -502,7 +496,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
         // update reward accumulators
         // temp comment out
-        /*
         if (_flowIn0 > 0) {
             rewards0CumulativeLast +=
                 (userRewardPercentages[user].reward0Percentage *
@@ -515,21 +508,22 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                     uint256(int256(userFlowIn1))) /
                 _flowIn1;
         }
-        */
 
         // set user and pool fee cumulatives
         userPriceCumulatives[user].fees0Cumulative = UQ128x128.decode(
             UQ128x128.decode(fees0CumulativeLast * poolFee) *
                 price0CumulativeLast
         );
-        //userPriceCumulatives[address(this)]
-        //.fees0Cumulative = userPriceCumulatives[user].fees0Cumulative;
+        // prev commented out:
+        userPriceCumulatives[address(this)]
+            .fees0Cumulative = userPriceCumulatives[user].fees0Cumulative;
         userPriceCumulatives[user].fees1Cumulative = UQ128x128.decode(
             UQ128x128.decode(fees1CumulativeLast * poolFee) *
                 price1CumulativeLast
         );
-        //userPriceCumulatives[address(this)]
-        //.fees1Cumulative = userPriceCumulatives[user].fees1Cumulative;
+        // prev commented out:
+        userPriceCumulatives[address(this)]
+            .fees1Cumulative = userPriceCumulatives[user].fees1Cumulative;
 
         // calculate outflows
         // TODO: check for overflow
