@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity >=0.8.0;
 
-import {ISuperfluid, ISuperToken, ISuperApp, ISuperAgreement, SuperAppDefinitions} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
+import {ISuperfluid, ISuperToken, ISuperfluidToken, ISuperApp, ISuperAgreement, SuperAppDefinitions} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperfluid.sol";
 import {SuperAppBase} from "@superfluid-finance/ethereum-contracts/contracts/apps/SuperAppBase.sol";
 import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/apps/CFAv1Library.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
@@ -35,6 +35,11 @@ contract SuperApp is SuperAppBase, IAqueductHost {
     uint256 public price0CumulativeLast;
     uint256 public price1CumulativeLast;
 
+    int96 private feesFlow0;
+    int96 private feesFlow1;
+    int256 private feesTotal0Last;
+    int256 private feesTotal1Last;
+
     // map user address to their starting price cumulatives
     struct UserPriceCumulative {
         int96 flowIn0;
@@ -45,6 +50,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         uint256 price1Cumulative;
         uint256 fees0Cumulative;
         uint256 fees1Cumulative;
+        int256 initialFeesTotal0;
+        int256 initialFeesTotal1;
     }
     mapping(address => UserPriceCumulative) private userPriceCumulatives;
 
@@ -207,6 +214,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         (pc0, pc1) = getCumulativesAtTime(block.timestamp);
     }
 
+    /*
     function getFeeCumulativesAtTime(uint256 timestamp)
         internal
         view
@@ -228,6 +236,56 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         returns (uint256 fc0, uint256 fc1)
     {
         (fc0, fc1) = getFeeCumulativesAtTime(block.timestamp);
+    }
+*/
+
+    function getFeesTotalAtTime(address token, uint256 timestamp)
+        internal
+        view
+        returns (int256 feesTotal)
+    {
+        /*
+        int96 feesFlowRate = cfa.getNetFlow(
+            ISuperfluidToken(token),
+            address(this)
+        );
+        */
+
+        int96 feesFlowRate;
+        int256 oldFeesTotal;
+        if (token == address(token0)) {
+            //feesFlowRate = math.signedDifference(userPriceCumulatives[address(this)].flowOut0, cfa.getNetFlow(ISuperToken(token), address(this)));
+            
+
+            feesFlowRate = feesFlow0;
+            oldFeesTotal = feesTotal0Last;
+        } else {
+            feesFlowRate = feesFlow1;
+            oldFeesTotal = feesTotal1Last;
+
+
+            //feesFlowRate = math.signedDifference(userPriceCumulatives[address(this)].flowOut1, cfa.getNetFlow(ISuperToken(token), address(this)));
+            /*
+            feesFlowRate =
+                userPriceCumulatives[address(this)].flowOut1 -
+                cfa.getNetFlow(ISuperfluidToken(token), address(this));
+            */
+        }
+
+        uint256 userCumulativeDelta = getUserCumulativeDelta(
+            token,
+            address(this),
+            timestamp
+        );
+        feesTotal = oldFeesTotal + (int256(feesFlowRate) * int256(userCumulativeDelta));
+    }
+
+    function getRealTimeFeesTotal(address token)
+        public
+        view
+        returns (int256 feesTotal)
+    {
+        feesTotal = getFeesTotalAtTime(token, block.timestamp);
     }
 
     function getUserCumulativeDelta(
@@ -263,6 +321,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         int256 tokenType
     );
 
+    /*
     function getUserReward(
         address token,
         address user,
@@ -324,6 +383,45 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                     );
                 }
             }
+        }
+    }
+*/
+
+    function getUserReward(
+        address token,
+        address user,
+        uint256 timestamp
+    ) public view returns (int256 reward) {
+        // calculate fees total
+        /*
+        int96 feesFlowRate = cfa.getNetFlow(
+            ISuperfluidToken(token),
+            address(this)
+        );
+        uint256 userCumulativeDelta = getUserCumulativeDelta(
+            token,
+            address(this),
+            timestamp
+        );
+        int256 feesTotal = int256(feesFlowRate) * int256(userCumulativeDelta);
+        */
+
+        int256 feesTotal = getFeesTotalAtTime(token, timestamp);
+
+        int256 initialFeesTotal = userPriceCumulatives[user].initialFeesTotal0;
+        if (token == address(token0)) {
+            initialFeesTotal = userPriceCumulatives[user].initialFeesTotal0;
+        } else {
+            initialFeesTotal = userPriceCumulatives[user].initialFeesTotal1;
+        }
+
+        // if address is pool, subtract fees total
+        if (user == address(this)) {
+            reward =
+                -1 *
+                ((feesTotal - initialFeesTotal) / int256(UQ128x128.Q128));
+        } else {
+            // otherwise, compute LP's percentage of fees total
         }
     }
 
@@ -423,6 +521,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         address user
     ) private returns (int96 userFlowOut0, int96 userFlowOut1) {
         // remove previous rewards from reward accumulators
+        /*
         if (_flowIn0 > 0) {
             rewards0CumulativeLast -=
                 (userRewardPercentages[user].reward0Percentage *
@@ -435,6 +534,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                     uint256(int256(previousUserFlowIn1))) /
                 _flowIn1;
         }
+        */
 
         // calculate expected pool reserves
         _flowIn0 = math.safeUnsignedAdd(
@@ -465,9 +565,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         uint256 feeMultiplier1 = UQ128x128.Q128 -
             ((feePercentage1 * poolFee) / UQ128x128.Q128);
 
-        // TODO: settle fees first?
-
         // remove previous fees from fee accumulators
+        /*
         // TODO: underflow is technically possible here, add checks?
         fees0CumulativeLast -= UQ128x128.decode(
             uint96(previousUserFlowIn0) *
@@ -477,6 +576,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             uint96(previousUserFlowIn1) *
             (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
         );
+        */
 
         // set both reward percentages
         userRewardPercentages[user].reward0Percentage = (UQ128x128.Q128 -
@@ -485,6 +585,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             feePercentage1);
 
         // update fee accumulators
+        /*
         fees0CumulativeLast += UQ128x128.decode(
             uint96(userFlowIn0) *
                 (UQ128x128.Q128 - userRewardPercentages[user].reward0Percentage)
@@ -493,8 +594,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             uint96(userFlowIn1) *
                 (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
         );
+        */
 
         // update reward accumulators
+        /*
         // temp comment out
         if (_flowIn0 > 0) {
             rewards0CumulativeLast +=
@@ -508,8 +611,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                     uint256(int256(userFlowIn1))) /
                 _flowIn1;
         }
+        */
 
         // set user and pool fee cumulatives
+        /*
         userPriceCumulatives[user].fees0Cumulative = UQ128x128.decode(
             UQ128x128.decode(fees0CumulativeLast * poolFee) *
                 price0CumulativeLast
@@ -524,6 +629,20 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // prev commented out:
         userPriceCumulatives[address(this)]
             .fees1Cumulative = userPriceCumulatives[user].fees1Cumulative;
+        */
+
+        /*
+        // calculate fees_total at this time
+        //moved::
+        int256 feesTotal0 = getRealTimeFeesTotal(address(token0));
+        int256 feesTotal1 = getRealTimeFeesTotal(address(token1));
+
+        // set fees_intial for both user and pool
+        userPriceCumulatives[user].initialFeesTotal0 = feesTotal0;
+        userPriceCumulatives[user].initialFeesTotal1 = feesTotal1;
+        userPriceCumulatives[address(this)].initialFeesTotal0 = feesTotal0;
+        userPriceCumulatives[address(this)].initialFeesTotal1 = feesTotal1;
+        */
 
         // calculate outflows
         // TODO: check for overflow
@@ -537,7 +656,34 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 UQ128x128.decode(feeMultiplier0 * uint256(uint96(userFlowIn0)))
             )
         );
+
+        // update fees Flow cumulatives
+        //old
+        //feesFlow0 -= getFlowRateOut(token0, user);
+        //feesFlow1 -= getFlowRateOut(token1, user);
+        //feesFlow0 += userFlowOut0;
+        //feesFlow1 += userFlowOut1;
+
+        /*
+        //moved 
+        feesFlow0 -= userPriceCumulatives[user].flowIn1 - userPriceCumulatives[user].flowOut0; //getFlowRateOut(token0, user);
+        feesFlow1 -= userPriceCumulatives[user].flowIn0 - userPriceCumulatives[user].flowOut1; //getFlowRateOut(token1, user);
+        feesFlow0 += userFlowIn1 - userFlowOut0;
+        feesFlow1 += userFlowIn0 - userFlowOut1;
+        */
     }
+
+    function getFeesFlows() external view returns (int96 flow0, int96 flow1) {
+        flow0 = feesFlow0;
+        flow1 = feesFlow1;
+    }
+
+    /*
+    function getFeeTotalAndInitial() external view returns (int96 total, int96 initial) {
+        total = getRealTimeFeesTotal(token0);
+        initial = userPriceCumulatives[address(this)].initialFeesTotal0;
+    }
+*/
 
     /* --- Superfluid callbacks --- */
 
@@ -636,6 +782,30 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 );
             }
         }
+
+        {
+            // update fees totals
+            feesTotal0Last = getRealTimeFeesTotal(address(token0));
+            feesTotal1Last = getRealTimeFeesTotal(address(token1));
+
+            // update recorded fees totals
+            //int256 feesTotal0 = getRealTimeFeesTotal(address(token0));
+            //int256 feesTotal1 = getRealTimeFeesTotal(address(token1));
+            userPriceCumulatives[flow.user].initialFeesTotal0 = feesTotal0Last;
+            userPriceCumulatives[flow.user].initialFeesTotal1 = feesTotal1Last;
+            userPriceCumulatives[address(this)].initialFeesTotal0 = feesTotal0Last;
+            userPriceCumulatives[address(this)].initialFeesTotal1 = feesTotal1Last;
+        }
+
+        // update fees flows
+        feesFlow0 -=
+            userPriceCumulatives[flow.user].flowIn1 -
+            userPriceCumulatives[flow.user].flowOut0;
+        feesFlow1 -=
+            userPriceCumulatives[flow.user].flowIn0 -
+            userPriceCumulatives[flow.user].flowOut1;
+        feesFlow0 += flow.userFlowIn1 - flow.userFlowOut0;
+        feesFlow1 += flow.userFlowIn0 - flow.userFlowOut1;
 
         // rebalance
         _update(

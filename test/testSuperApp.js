@@ -140,6 +140,7 @@ describe("SuperApp Tests", function () {
         console.log('pool deposits 1: ' + poolDeposits1);
         console.log('pool rewards 0: ' + await superApp.getRealTimeUserReward(token0.address, superApp.address));
         console.log('pool rewards 1: ' + await superApp.getRealTimeUserReward(token1.address, superApp.address));
+        console.log('fees flows: ' + await superApp.getFeesFlows());
         
         console.log('userA:  ' + await token0.balanceOf(addr1.address) + ',  ' + await token1.balanceOf(addr1.address));
         console.log('userA ∆:  ' + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address) + ',  ' + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
