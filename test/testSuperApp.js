@@ -24,6 +24,7 @@ describe("SuperApp Tests", function () {
     let owner;
     let addr1;
     let addr2;
+    let addr3;
     let addrs;
     let testWalletSigner;
 
@@ -32,41 +33,13 @@ describe("SuperApp Tests", function () {
     let signer;
     let addr1Signer;
     let addr2Signer;
+    let addr3Signer;
 
     // delay helper function
     const delay = async (seconds) => {
         await hre.ethers.provider.send('evm_increaseTime', [seconds]);
         await hre.ethers.provider.send("evm_mine");
     };
-
-    const logSumOfAllBalances2 = async () => {
-        var sum = (await token0.balanceOf(testWalletAddress)) / 10**18;
-        sum += (await token1.balanceOf(testWalletAddress)) / 10**18;
-        sum += (await token0.balanceOf(superApp.address)) / 10**18;
-        sum += (await token1.balanceOf(superApp.address)) / 10**18;
-        sum += (await token0.balanceOf(addr1.address)) / 10**18;
-        sum += (await token1.balanceOf(addr1.address)) / 10**18;
-        sum += (await token0.balanceOf(addr2.address)) / 10**18;
-        sum += (await token1.balanceOf(addr2.address)) / 10**18;
-
-        // add deposits
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: testWalletAddress, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: testWalletAddress, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: superApp.address, receiver: testWalletAddress, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: superApp.address, receiver: testWalletAddress, providerOrSigner: addr1Signer})).deposit / 10**18;
-
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: addr1.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: addr1.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: superApp.address, receiver: addr1.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: superApp.address, receiver: addr1.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: addr2.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: addr2.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: superApp.address, receiver: addr2.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: superApp.address, receiver: addr2.address, providerOrSigner: addr1Signer})).deposit / 10**18;
-
-        console.log('Sum of all balances: ' + sum);
-    }
 
     const logSumOfAllBalances = async () => {
         var lpSum = (await token0.balanceOf(testWalletAddress)) / 1;
@@ -77,6 +50,8 @@ describe("SuperApp Tests", function () {
         userASum += (await token1.balanceOf(addr1.address)) / 1;
         var userBSum = (await token0.balanceOf(addr2.address)) / 1;
         userBSum += (await token1.balanceOf(addr2.address)) / 1;
+        var lp2Sum = (await token0.balanceOf(addr3.address)) / 1;
+        lp2Sum += (await token1.balanceOf(addr3.address)) / 1;
 
         // add deposits
         lpSum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: testWalletAddress, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 1;
@@ -94,25 +69,18 @@ describe("SuperApp Tests", function () {
         poolSum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: superApp.address, receiver: addr2.address, providerOrSigner: addr1Signer})).deposit / 1;
         poolSum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: superApp.address, receiver: addr2.address, providerOrSigner: addr1Signer})).deposit / 1;
 
+        lp2Sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: addr3.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 1;
+        lp2Sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: addr3.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 1;
+        poolSum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: superApp.address, receiver: addr3.address, providerOrSigner: addr1Signer})).deposit / 1;
+        poolSum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: superApp.address, receiver: addr3.address, providerOrSigner: addr1Signer})).deposit / 1;
+
         // log all
         console.log('LP sum: ' + lpSum);
+        console.log('LP2 sum: ' + lp2Sum);
         console.log('Pool sum: ' + poolSum);
         console.log('UserA sum: ' + userASum);
         console.log('UserB sum: ' + userBSum);
-        console.log('Sum of all balances: ' + (lpSum + poolSum + userASum + userBSum));
-    }
-
-    const logSumOfAllBalances3 = async () => {
-        var sum = (await token0.balanceOf(addr2.address)) / 1;
-        sum += (await token1.balanceOf(addr2.address)) / 1;
-
-        // add deposits
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: addr2.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 1;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: addr2.address, receiver: superApp.address, providerOrSigner: addr1Signer})).deposit / 1;
-        sum += (await sf.cfaV1.getFlow({superToken: token0.address, sender: superApp.address, receiver: addr2.address, providerOrSigner: addr1Signer})).deposit / 1;
-        sum += (await sf.cfaV1.getFlow({superToken: token1.address, sender: superApp.address, receiver: addr2.address, providerOrSigner: addr1Signer})).deposit / 1;
-
-        console.log('Sum of all balances: ' + sum);
+        console.log('Sum of all balances: ' + (lpSum + lp2Sum + poolSum + userASum + userBSum));
     }
 
     const logAllBalances = async () => {
@@ -125,7 +93,20 @@ describe("SuperApp Tests", function () {
         console.log('lp deposits 1: ' + ((await sf.cfaV1.getFlow({superToken: token1.address, sender: testWalletAddress, receiver: superApp.address, providerOrSigner: testWalletSigner})).deposit / 1));
         console.log('lp rewards 0: ' + await superApp.getRealTimeUserReward(token0.address, testWalletAddress));
         console.log('lp rewards 1: ' + await superApp.getRealTimeUserReward(token1.address, testWalletAddress));
+        console.log('lp detailed rewards 0: ' + await superApp.getDetailedUserReward(token0.address, testWalletAddress));
+        console.log('lp detailed rewards 1: ' + await superApp.getDetailedUserReward(token1.address, testWalletAddress));
 
+        console.log('LP2:  ' + await token0.balanceOf(addr3.address) + ',  ' + await token1.balanceOf(addr3.address));
+        console.log('LP2 ∆:  ' + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr3.address) + ',  ' + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr3.address));
+        console.log('LP2 nF:  ' + await superApp.getTwapNetFlowRate(token0.address, addr3.address) + ',  ' + await superApp.getTwapNetFlowRate(token1.address, addr3.address));
+        console.log('LP2 sfF:  ' + await sf.cfaV1.getNetFlow({superToken: token0.address, account: addr3.address, providerOrSigner: addr1Signer}) + ',  ' + await sf.cfaV1.getNetFlow({superToken: token1.address, account: addr3.address, providerOrSigner: addr1Signer}));
+        console.log('lp2 deposits 0: ' + ((await sf.cfaV1.getFlow({superToken: token0.address, sender: addr3.address, receiver: superApp.address, providerOrSigner: addr3Signer})).deposit / 1));
+        console.log('lp2 deposits 1: ' + ((await sf.cfaV1.getFlow({superToken: token1.address, sender: addr3.address, receiver: superApp.address, providerOrSigner: addr3Signer})).deposit / 1));
+        console.log('lp2 rewards 0: ' + await superApp.getRealTimeUserReward(token0.address, addr3.address));
+        console.log('lp2 rewards 1: ' + await superApp.getRealTimeUserReward(token1.address, addr3.address));
+        console.log('lp2 detailed rewards 0: ' + await superApp.getDetailedUserReward(token0.address, addr3.address));
+        console.log('lp2 detailed rewards 1: ' + await superApp.getDetailedUserReward(token1.address, addr3.address));
+        
         console.log('pool:  ' + await token0.balanceOf(superApp.address) + ',  ' + await token1.balanceOf(superApp.address));
         console.log('pool ∆:  ' + await superApp.getRealTimeUserCumulativeDelta(token0.address, superApp.address) + ',  ' + await superApp.getRealTimeUserCumulativeDelta(token1.address, superApp.address));
         console.log('pool nF:  ' + await superApp.getTwapNetFlowRate(token0.address, superApp.address) + ',  ' + await superApp.getTwapNetFlowRate(token1.address, superApp.address));
@@ -141,6 +122,7 @@ describe("SuperApp Tests", function () {
         console.log('pool rewards 0: ' + await superApp.getRealTimeUserReward(token0.address, superApp.address));
         console.log('pool rewards 1: ' + await superApp.getRealTimeUserReward(token1.address, superApp.address));
         console.log('fees flows: ' + await superApp.getFeesFlows());
+        console.log('liquidity flows: ' + await superApp.getLiquidityFlows());
         
         console.log('userA:  ' + await token0.balanceOf(addr1.address) + ',  ' + await token1.balanceOf(addr1.address));
         console.log('userA ∆:  ' + await superApp.getRealTimeUserCumulativeDelta(token0.address, addr1.address) + ',  ' + await superApp.getRealTimeUserCumulativeDelta(token1.address, addr1.address));
@@ -161,11 +143,6 @@ describe("SuperApp Tests", function () {
         console.log('userB rewards 1: ' + await superApp.getRealTimeUserReward(token1.address, addr2.address));
     }
 
-    const logInitialCumulatives = async () => {
-        const cumulatives = await superApp.getUserPriceCumulatives(testWalletAddress);
-        console.log('initial cumulatives: ' + cumulatives);
-    }
-
     const logCumulatives = async () => {
         const cumulatives = await superApp.getRealTimeCumulatives();
         console.log('realtime cumulatives: ' + cumulatives);
@@ -174,7 +151,7 @@ describe("SuperApp Tests", function () {
     // runs before every test
     beforeEach(async function () {
         // get signers
-        [owner, addr1, addr2, ...addrs] = await ethers.getSigners();
+        [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
         await hre.network.provider.request({
             method: "hardhat_impersonateAccount",
             params: [testWalletAddress],
@@ -225,6 +202,12 @@ describe("SuperApp Tests", function () {
         let addr2PC = '0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a';
         addr2Signer = sf.createSigner({
             privateKey: addr2PC,
+            provider: ethers.provider,
+        })
+
+        let addr3PC = '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6';
+        addr3Signer = sf.createSigner({
+            privateKey: addr3PC,
             provider: ethers.provider,
         })
     })
@@ -320,6 +303,46 @@ describe("SuperApp Tests", function () {
             await delay(36000);
 
             // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            // provide liquidity from a second account
+            await token0.connect(testWalletSigner).transfer(addr3.address, amnt2); // transfer some tokens to addr3
+            await token1.connect(testWalletSigner).transfer(addr3.address, amnt2); // transfer some tokens to addr3
+            console.log('\n_____ LP2 token0 --> token1 _____')
+            const createFlowOperation5 = sf.cfaV1.createFlow({
+                sender: addr3.address,
+                receiver: superApp.address,
+                superToken: token0.address,
+                flowRate: "100000000000"
+            });
+            const createFlowRes5 = await createFlowOperation5.exec(addr3Signer);
+            await createFlowRes5.wait();
+            
+            // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            // provide liquidity in the other direction
+            console.log('\n_____ LP2 token0 <-- token1 _____')
+            const createFlowOperation6 = sf.cfaV1.createFlow({
+                sender: addr3.address,
+                receiver: superApp.address,
+                superToken: token1.address,
+                flowRate: "100000000000"
+            });
+            const createFlowRes6 = await createFlowOperation6.exec(addr3Signer);
+            await createFlowRes6.wait();
+
+            // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            await delay(36000);
+
             await logCumulatives();
             await logAllBalances();
             await logSumOfAllBalances();
