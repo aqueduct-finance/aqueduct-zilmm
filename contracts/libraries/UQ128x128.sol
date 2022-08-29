@@ -14,6 +14,12 @@ library UQ128x128 {
         y = z / Q128;
     }
 
+    // halfway decode a UQ128x128 by dividing by 2^64
+    // used to prevent overflow in certain circumstances
+    function halfDecode(uint256 z) internal pure returns (uint256 y) {
+        y = z / 2**64;
+    }
+
     // encode a uint128 as a UQ128x128
     function encode(uint128 y) internal pure returns (uint256 z) {
         z = uint256(y) * Q128; // never overflows

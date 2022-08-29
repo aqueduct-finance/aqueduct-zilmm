@@ -85,6 +85,11 @@ describe("SuperApp Tests", function () {
 
     const logAllBalances = async () => {
         console.log('____________________________')
+        console.log('FEES DETAILS 0: ' + (await superApp.getFeesDetails(token0.address)));
+        console.log('rt 0: ' + (await superApp.getRealTimeFeesCumulative(token0.address)));
+        console.log('FEES DETAILS 1: ' + (await superApp.getFeesDetails(token1.address)));
+        console.log('rt 1: ' + (await superApp.getRealTimeFeesCumulative(token1.address)));
+        console.log('____________________________')
         console.log('LP:  ' + await token0.balanceOf(testWalletAddress) + ',  ' + await token1.balanceOf(testWalletAddress));
         console.log('LP ∆:  ' + await superApp.getRealTimeUserCumulativeDelta(token0.address, testWalletAddress) + ',  ' + await superApp.getRealTimeUserCumulativeDelta(token1.address, testWalletAddress));
         console.log('LP nF:  ' + await superApp.getTwapNetFlowRate(token0.address, testWalletAddress) + ',  ' + await superApp.getTwapNetFlowRate(token1.address, testWalletAddress));
