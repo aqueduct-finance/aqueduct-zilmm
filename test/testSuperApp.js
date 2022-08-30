@@ -401,14 +401,56 @@ describe("SuperApp Tests", function () {
             await logAllBalances();
             await logSumOfAllBalances();
 
-            console.log('\n_____ User A token0 -x-> token1 _____')
+            console.log('\n_____ LP2 token0 <-x- token1 _____')
             const deleteFlowOperation2 = sf.cfaV1.deleteFlow({
+                sender: addr3.address,
+                receiver: superApp.address,
+                superToken: token1.address
+            });
+            const deleteFlowRes2 = await deleteFlowOperation2.exec(testWalletSigner);
+            await deleteFlowRes2.wait();
+            
+            // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            await delay(36000);
+
+            // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            console.log('\n_____ LP2 token0 -x-> token1 _____')
+            const deleteFlowOperation3 = sf.cfaV1.deleteFlow({
+                sender: addr3.address,
+                receiver: superApp.address,
+                superToken: token0.address
+            });
+            const deleteFlowRes3 = await deleteFlowOperation3.exec(testWalletSigner);
+            await deleteFlowRes3.wait();
+
+            // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            await delay(36000);
+
+            // all
+            await logCumulatives();
+            await logAllBalances();
+            await logSumOfAllBalances();
+
+            console.log('\n_____ User A token0 -x-> token1 _____')
+            const deleteFlowOperation4 = sf.cfaV1.deleteFlow({
                 sender: addr1.address,
                 receiver: superApp.address,
                 superToken: token0.address
             });
-            const deleteFlowRes2 = await deleteFlowOperation2.exec(addr1Signer);
-            await deleteFlowRes2.wait();
+            const deleteFlowRes4 = await deleteFlowOperation4.exec(addr1Signer);
+            await deleteFlowRes4.wait();
 
             // all
             await logCumulatives();
@@ -423,13 +465,13 @@ describe("SuperApp Tests", function () {
             await logSumOfAllBalances();
 
             console.log('\n_____ LP token0 <-x- token1 _____')
-            const deleteFlowOperation3 = sf.cfaV1.deleteFlow({
+            const deleteFlowOperation5 = sf.cfaV1.deleteFlow({
                 sender: testWalletAddress,
                 receiver: superApp.address,
                 superToken: token1.address
             });
-            const deleteFlowRes3 = await deleteFlowOperation3.exec(testWalletSigner);
-            await deleteFlowRes3.wait();
+            const deleteFlowRes5 = await deleteFlowOperation5.exec(testWalletSigner);
+            await deleteFlowRes5.wait();
             
             // all
             await logCumulatives();
@@ -444,13 +486,13 @@ describe("SuperApp Tests", function () {
             await logSumOfAllBalances();
 
             console.log('\n_____ LP token0 -x-> token1 _____')
-            const deleteFlowOperation4 = sf.cfaV1.deleteFlow({
+            const deleteFlowOperation6 = sf.cfaV1.deleteFlow({
                 sender: testWalletAddress,
                 receiver: superApp.address,
                 superToken: token0.address
             });
-            const deleteFlowRes4 = await deleteFlowOperation4.exec(testWalletSigner);
-            await deleteFlowRes4.wait();
+            const deleteFlowRes6 = await deleteFlowOperation6.exec(testWalletSigner);
+            await deleteFlowRes6.wait();
 
             // all
             await logCumulatives();

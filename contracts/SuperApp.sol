@@ -93,15 +93,6 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     /* --- Helper functions --- */
 
-    /* Gets the opposite token in the pool given one supertoken (assumes tokenIn is part of pool) */
-    function getOppositeToken(ISuperToken tokenIn)
-        internal
-        view
-        returns (ISuperToken)
-    {
-        return address(tokenIn) == address(token0) ? token1 : token0;
-    }
-
     function getUserFromCtx(bytes calldata _ctx)
         internal
         view
@@ -311,6 +302,36 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         }
     }
 
+    function _updateFeesAndRewards(
+        int96 relFeesFlow0,
+        int96 relFeesFlow1,
+        int96 userLiquidityFlow0,
+        int96 userLiquidityFlow1,
+        address user
+    ) private {
+        // update fees accumulators
+        fees0CumulativeLast = getRealTimeFeesCumulative(address(token0));
+        fees1CumulativeLast = getRealTimeFeesCumulative(address(token1));
+        userData[user].fees0Cumulative = fees0CumulativeLast;
+        userData[user].fees1Cumulative = fees1CumulativeLast;
+        userData[address(this)].fees0Cumulative = fees0CumulativeLast;
+        userData[address(this)].fees1Cumulative = fees1CumulativeLast;
+
+        // update fees flows
+        feesFlow0 -= userData[user].flowIn1 - userData[user].flowOut0;
+        feesFlow1 -= userData[user].flowIn0 - userData[user].flowOut1;
+        feesFlow0 += relFeesFlow0; //flow.userFlowIn1 - flow.userFlowOut0;
+        feesFlow1 += relFeesFlow1; //flow.userFlowIn0 - flow.userFlowOut1;
+
+        // update liquidity flows
+        liquidityFlow0 -= userData[user].liquidityFlow0;
+        liquidityFlow1 -= userData[user].liquidityFlow1;
+        liquidityFlow0 += userLiquidityFlow0;
+        liquidityFlow1 += userLiquidityFlow1;
+        userData[user].liquidityFlow0 = userLiquidityFlow0;
+        userData[user].liquidityFlow1 = userLiquidityFlow1;
+    }
+
     // update flow reserves and, on the first call per block, price accumulators
     function _update(
         uint128 _flowIn0,
@@ -384,10 +405,10 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         int96 previousUserFlowIn0,
         int96 previousUserFlowIn1,
         int96 userFlowIn0,
-        int96 userFlowIn1,
-        address user
+        int96 userFlowIn1
     )
         private
+        view
         returns (
             int96 userFlowOut0,
             int96 userFlowOut1,
@@ -467,6 +488,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     struct Flow {
         address user;
+        bool isToken0;
         int96 userFlowIn0;
         int96 userFlowIn1;
         int96 userFlowOut0;
@@ -499,111 +521,59 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
-        //flow.oppositeToken = getOppositeToken(_superToken);
-
+        flow.isToken0 = address(_superToken) == address(token0);
         flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
         flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
-
         flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
         flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
 
-        if (address(_superToken) == address(token0)) {
-            (
-                flow.userFlowOut0,
-                flow.userFlowOut1,
-                flow.userLiquidityFlow0,
-                flow.userLiquidityFlow1
-            ) = getUserOutflows(
-                flowIn0,
-                flowIn1,
-                0,
-                flow.userFlowIn1,
-                flow.userFlowIn0,
-                flow.userFlowIn1,
-                flow.user
-            );
-        } else {
-            (
-                flow.userFlowOut0,
-                flow.userFlowOut1,
-                flow.userLiquidityFlow0,
-                flow.userLiquidityFlow1
-            ) = getUserOutflows(
-                flowIn0,
-                flowIn1,
-                flow.userFlowIn0,
-                0,
-                flow.userFlowIn0,
-                flow.userFlowIn1,
-                flow.user
+        (
+            flow.userFlowOut0,
+            flow.userFlowOut1,
+            flow.userLiquidityFlow0,
+            flow.userLiquidityFlow1
+        ) = getUserOutflows(
+            flowIn0,
+            flowIn1,
+            flow.isToken0 ? int96(0) : flow.userFlowIn0,
+            flow.isToken0 ? flow.userFlowIn1 : int96(0),
+            flow.userFlowIn0,
+            flow.userFlowIn1
+        );
+
+        newCtx = cfaV1.createFlowWithCtx(
+            _ctx,
+            flow.user,
+            flow.isToken0 ? token1 : token0,
+            flow.isToken0 ? flow.userFlowOut1 : flow.userFlowOut0
+        );
+        if (
+            (flow.isToken0 && flow.previousUserFlowOut0 != flow.userFlowOut0) ||
+            (!flow.isToken0 && flow.previousUserFlowOut1 != flow.userFlowOut1)
+        ) {
+            newCtx = cfaV1.updateFlowWithCtx(
+                newCtx,
+                flow.user,
+                _superToken,
+                flow.isToken0 ? flow.userFlowOut0 : flow.userFlowOut1
             );
         }
 
-        // update other stream if fees were updated
-        if (address(_superToken) == address(token0)) {
-            newCtx = cfaV1.createFlowWithCtx(
-                _ctx,
-                flow.user,
-                token1,
-                flow.userFlowOut1
-            );
-            if (flow.previousUserFlowOut0 != flow.userFlowOut0) {
-                newCtx = cfaV1.updateFlowWithCtx(
-                    newCtx,
-                    flow.user,
-                    _superToken,
-                    flow.userFlowOut0
-                );
-            }
-        } else {
-            newCtx = cfaV1.createFlowWithCtx(
-                _ctx,
-                flow.user,
-                token0,
-                flow.userFlowOut0
-            );
-            if (flow.previousUserFlowOut1 != flow.userFlowOut1) {
-                newCtx = cfaV1.updateFlowWithCtx(
-                    newCtx,
-                    flow.user,
-                    _superToken,
-                    flow.userFlowOut1
-                );
-            }
-        }
-
-        // update fees accumulators
-        fees0CumulativeLast = getRealTimeFeesCumulative(address(token0));
-        fees1CumulativeLast = getRealTimeFeesCumulative(address(token1));
-        userData[flow.user].fees0Cumulative = fees0CumulativeLast;
-        userData[flow.user].fees1Cumulative = fees1CumulativeLast;
-        userData[address(this)].fees0Cumulative = fees0CumulativeLast;
-        userData[address(this)].fees1Cumulative = fees1CumulativeLast;
-
-        // update fees flows
-        feesFlow0 -= userData[flow.user].flowIn1 - userData[flow.user].flowOut0;
-        feesFlow1 -= userData[flow.user].flowIn0 - userData[flow.user].flowOut1;
-        feesFlow0 += flow.userFlowIn1 - flow.userFlowOut0;
-        feesFlow1 += flow.userFlowIn0 - flow.userFlowOut1;
-
-        // update liquidity flows
-        liquidityFlow0 -= userData[flow.user].liquidityFlow0;
-        liquidityFlow1 -= userData[flow.user].liquidityFlow1;
-        liquidityFlow0 += flow.userLiquidityFlow0;
-        liquidityFlow1 += flow.userLiquidityFlow1;
-        userData[flow.user].liquidityFlow0 = flow.userLiquidityFlow0;
-        userData[flow.user].liquidityFlow1 = flow.userLiquidityFlow1;
+        // update variables for tracking fees and rewards
+        _updateFeesAndRewards(
+            flow.userFlowIn1 - flow.userFlowOut0,
+            flow.userFlowIn0 - flow.userFlowOut1,
+            flow.userLiquidityFlow0,
+            flow.userLiquidityFlow1,
+            flow.user
+        );
 
         // rebalance
         _update(
             flowIn0,
             flowIn1,
-            address(_superToken) == address(token0)
-                ? flow.userFlowIn0
-                : int96(0),
-            address(_superToken) == address(token1)
-                ? flow.userFlowIn1
-                : int96(0),
+            flow.isToken0 ? flow.userFlowIn0 : int96(0),
+            flow.isToken0 ? flow.userFlowIn1 : int96(0),
             flow.userFlowOut0 - flow.previousUserFlowOut0,
             flow.userFlowOut1 - flow.previousUserFlowOut1,
             flow.user
@@ -660,10 +630,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
-
         flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
         flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
-
         flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
         flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
 
@@ -681,81 +649,56 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             token1.settleTwapBalance(flow.user, flow.initialTimestamp1);
         }
 
-        // update fees
-        if (address(_superToken) == address(token0)) {
-            (
-                flow.userFlowOut0,
-                flow.userFlowOut1,
-                flow.userLiquidityFlow0,
-                flow.userLiquidityFlow1
-            ) = getUserOutflows(
-                flowIn0,
-                flowIn1,
-                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
-                flow.userFlowIn1,
-                flow.userFlowIn0,
-                flow.userFlowIn1,
-                flow.user
-            );
-        } else {
-            (
-                flow.userFlowOut0,
-                flow.userFlowOut1,
-                flow.userLiquidityFlow0,
-                flow.userLiquidityFlow1
-            ) = getUserOutflows(
-                flowIn0,
-                flowIn1,
-                flow.userFlowIn0,
-                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
-                flow.userFlowIn0,
-                flow.userFlowIn1,
-                flow.user
+        (
+            flow.userFlowOut0,
+            flow.userFlowOut1,
+            flow.userLiquidityFlow0,
+            flow.userLiquidityFlow1
+        ) = getUserOutflows(
+            flowIn0,
+            flowIn1,
+            flow.isToken0 ? flow.previousUserFlowIn : flow.userFlowIn0,
+            flow.isToken0 ? flow.userFlowIn1 : flow.previousUserFlowIn,
+            flow.userFlowIn0,
+            flow.userFlowIn1
+        );
+
+        newCtx = cfaV1.updateFlowWithCtx(
+            _ctx,
+            flow.user,
+            flow.isToken0 ? token1 : token0,
+            flow.isToken0 ? flow.userFlowOut1 : flow.userFlowOut0
+        );
+        if (
+            (flow.isToken0 && flow.previousUserFlowOut0 != flow.userFlowOut0) ||
+            (!flow.isToken0 && flow.previousUserFlowOut1 != flow.userFlowOut1)
+        ) {
+            newCtx = cfaV1.updateFlowWithCtx(
+                newCtx,
+                flow.user,
+                _superToken,
+                flow.isToken0 ? flow.userFlowOut0 : flow.userFlowOut1
             );
         }
 
-        // update flows
-        if (address(_superToken) == address(token0)) {
-            newCtx = cfaV1.updateFlowWithCtx(
-                _ctx,
-                flow.user,
-                token1,
-                flow.userFlowOut1
-            );
-            if (flow.previousUserFlowOut0 != flow.userFlowOut0) {
-                newCtx = cfaV1.updateFlowWithCtx(
-                    newCtx,
-                    flow.user,
-                    _superToken,
-                    flow.userFlowOut0
-                );
-            }
-        } else {
-            newCtx = cfaV1.updateFlowWithCtx(
-                _ctx,
-                flow.user,
-                token0,
-                flow.userFlowOut0
-            );
-            if (flow.previousUserFlowOut1 != flow.userFlowOut1) {
-                newCtx = cfaV1.updateFlowWithCtx(
-                    newCtx,
-                    flow.user,
-                    _superToken,
-                    flow.userFlowOut1
-                );
-            }
-        }
+        // update variables for tracking fees and rewards
+        _updateFeesAndRewards(
+            flow.userFlowIn1 - flow.userFlowOut0,
+            flow.userFlowIn0 - flow.userFlowOut1,
+            flow.userLiquidityFlow0,
+            flow.userLiquidityFlow1,
+            flow.user
+        );
 
         // rebalance
         _update(
             flowIn0,
             flowIn1,
-            address(_superToken) == address(token0)
-                ? flow.userFlowIn0 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+            flow.isToken0
+                ? flow.userFlowIn0 - flow.previousUserFlowIn
                 : int96(0),
-            address(_superToken) == address(token1)
-                ? flow.userFlowIn1 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+            flow.isToken0
+                ? flow.userFlowIn1 - flow.previousUserFlowIn
                 : int96(0),
             flow.userFlowOut0 - flow.previousUserFlowOut0,
             flow.userFlowOut1 - flow.previousUserFlowOut1,
@@ -818,10 +761,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
-
         flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
         flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
-
         flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
         flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
 
@@ -839,81 +780,56 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             token1.settleTwapBalance(flow.user, flow.initialTimestamp1);
         }
 
-        // update fees
-        if (address(_superToken) == address(token0)) {
-            (
-                flow.userFlowOut0,
-                flow.userFlowOut1,
-                flow.userLiquidityFlow0,
-                flow.userLiquidityFlow1
-            ) = getUserOutflows(
-                flowIn0,
-                flowIn1,
-                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
-                flow.userFlowIn1,
-                flow.userFlowIn0,
-                flow.userFlowIn1,
-                flow.user
-            );
-        } else {
-            (
-                flow.userFlowOut0,
-                flow.userFlowOut1,
-                flow.userLiquidityFlow0,
-                flow.userLiquidityFlow1
-            ) = getUserOutflows(
-                flowIn0,
-                flowIn1,
-                flow.userFlowIn0,
-                flow.previousUserFlowIn, //abi.decode(_cbdata, (int96)),
-                flow.userFlowIn0,
-                flow.userFlowIn1,
-                flow.user
+        (
+            flow.userFlowOut0,
+            flow.userFlowOut1,
+            flow.userLiquidityFlow0,
+            flow.userLiquidityFlow1
+        ) = getUserOutflows(
+            flowIn0,
+            flowIn1,
+            flow.isToken0 ? flow.previousUserFlowIn : flow.userFlowIn0,
+            flow.isToken0 ? flow.userFlowIn1 : flow.previousUserFlowIn,
+            flow.userFlowIn0,
+            flow.userFlowIn1
+        );
+
+        newCtx = cfaV1.deleteFlowWithCtx(
+            _ctx,
+            address(this),
+            flow.user,
+            flow.isToken0 ? token1 : token0
+        );
+        if (
+            (flow.isToken0 && flow.previousUserFlowOut0 != flow.userFlowOut0) ||
+            (!flow.isToken0 && flow.previousUserFlowOut1 != flow.userFlowOut1)
+        ) {
+            newCtx = cfaV1.updateFlowWithCtx(
+                newCtx,
+                flow.user,
+                _superToken,
+                flow.isToken0 ? flow.userFlowOut0 : flow.userFlowOut1
             );
         }
 
-        // update flows
-        if (address(_superToken) == address(token0)) {
-            newCtx = cfaV1.deleteFlowWithCtx(
-                _ctx,
-                address(this),
-                flow.user,
-                token1
-            );
-            if (flow.previousUserFlowOut0 != flow.userFlowOut0) {
-                newCtx = cfaV1.updateFlowWithCtx(
-                    newCtx,
-                    flow.user,
-                    _superToken,
-                    flow.userFlowOut0
-                );
-            }
-        } else {
-            newCtx = cfaV1.deleteFlowWithCtx(
-                _ctx,
-                address(this),
-                flow.user,
-                token0
-            );
-            if (flow.previousUserFlowOut1 != flow.userFlowOut1) {
-                newCtx = cfaV1.updateFlowWithCtx(
-                    newCtx,
-                    flow.user,
-                    _superToken,
-                    flow.userFlowOut1
-                );
-            }
-        }
+        // update variables for tracking fees and rewards
+        _updateFeesAndRewards(
+            flow.userFlowIn1 - flow.userFlowOut0,
+            flow.userFlowIn0 - flow.userFlowOut1,
+            flow.userLiquidityFlow0,
+            flow.userLiquidityFlow1,
+            flow.user
+        );
 
         // rebalance
         _update(
             flowIn0,
             flowIn1,
-            address(_superToken) == address(token0)
-                ? flow.userFlowIn0 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+            flow.isToken0
+                ? flow.userFlowIn0 - flow.previousUserFlowIn
                 : int96(0),
-            address(_superToken) == address(token1)
-                ? flow.userFlowIn1 - flow.previousUserFlowIn //abi.decode(_cbdata, (int96))
+            flow.isToken0
+                ? flow.userFlowIn1 - flow.previousUserFlowIn
                 : int96(0),
             flow.userFlowOut0 - flow.previousUserFlowOut0,
             flow.userFlowOut1 - flow.previousUserFlowOut1,
