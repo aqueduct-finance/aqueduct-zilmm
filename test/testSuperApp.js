@@ -287,7 +287,7 @@ describe("SuperApp Tests", function () {
                 sender: addr1.address,
                 receiver: superApp.address,
                 superToken: token0.address,
-                flowRate: "10000000000"//"10000000000"
+                flowRate: "1000000000000"//"10000000000"
             });
             const createFlowRes3 = await createFlowOperation3.exec(addr1Signer);
             await createFlowRes3.wait();

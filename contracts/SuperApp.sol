@@ -527,6 +527,12 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
         flow.previousUserFlowOut1 = getFlowRateOut(token1, flow.user);
 
+        /*
+        require(
+            (flow.isToken0 && )
+        );
+        */
+
         (
             flow.userFlowOut0,
             flow.userFlowOut1,
