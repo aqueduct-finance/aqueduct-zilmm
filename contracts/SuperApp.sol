@@ -579,7 +579,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
             flowIn0,
             flowIn1,
             flow.isToken0 ? flow.userFlowIn0 : int96(0),
-            flow.isToken0 ? flow.userFlowIn1 : int96(0),
+            flow.isToken0 ? int96(0) : flow.userFlowIn1,
             flow.userFlowOut0 - flow.previousUserFlowOut0,
             flow.userFlowOut1 - flow.previousUserFlowOut1,
             flow.user
@@ -636,6 +636,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
+        flow.isToken0 = address(_superToken) == address(token0);
         flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
         flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
         flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
@@ -704,8 +705,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 ? flow.userFlowIn0 - flow.previousUserFlowIn
                 : int96(0),
             flow.isToken0
-                ? flow.userFlowIn1 - flow.previousUserFlowIn
-                : int96(0),
+                ? int96(0)
+                : flow.userFlowIn1 - flow.previousUserFlowIn,
             flow.userFlowOut0 - flow.previousUserFlowOut0,
             flow.userFlowOut1 - flow.previousUserFlowOut1,
             flow.user
@@ -767,6 +768,7 @@ contract SuperApp is SuperAppBase, IAqueductHost {
         // avoid stack too deep
         Flow memory flow;
         flow.user = getUserFromCtx(_ctx);
+        flow.isToken0 = address(_superToken) == address(token0);
         flow.userFlowIn0 = getFlowRateIn(token0, flow.user);
         flow.userFlowIn1 = getFlowRateIn(token1, flow.user);
         flow.previousUserFlowOut0 = getFlowRateOut(token0, flow.user);
@@ -835,8 +837,8 @@ contract SuperApp is SuperAppBase, IAqueductHost {
                 ? flow.userFlowIn0 - flow.previousUserFlowIn
                 : int96(0),
             flow.isToken0
-                ? flow.userFlowIn1 - flow.previousUserFlowIn
-                : int96(0),
+                ? int96(0)
+                : flow.userFlowIn1 - flow.previousUserFlowIn,
             flow.userFlowOut0 - flow.previousUserFlowOut0,
             flow.userFlowOut1 - flow.previousUserFlowOut1,
             flow.user

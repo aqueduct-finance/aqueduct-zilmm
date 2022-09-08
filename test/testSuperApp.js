@@ -4,7 +4,7 @@ const IERC20 = artifacts.require("@openzeppelin/contracts/token/ERC20/IERC20.sol
 require("dotenv").config();
 
 // test wallets
-const testWalletAddress = '0xFc25b7BE2945Dd578799D15EC5834Baf34BA28e1';
+const testWalletAddress = '0xFA4CB7712bAd2eafe1F304d167a31B6E080d43a0';
 
 // tokens
 const fdaixAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8';
@@ -87,6 +87,8 @@ describe("SuperApp Tests", function () {
         console.log('____________________________')
         console.log('rt 0: ' + (await superApp.getRealTimeFeesCumulative(token0.address)));
         console.log('rt 1: ' + (await superApp.getRealTimeFeesCumulative(token1.address)));
+        console.log('FC 0: ' + (await superApp.getFeesCumulativeAtTime2(token0.address)));
+        console.log('FC 1: ' + (await superApp.getFeesCumulativeAtTime2(token1.address)));
         console.log('____________________________')
         console.log('LP:  ' + await token0.balanceOf(testWalletAddress) + ',  ' + await token1.balanceOf(testWalletAddress));
         console.log('LP ∆:  ' + await superApp.getRealTimeUserCumulativeDelta(token0.address, testWalletAddress) + ',  ' + await superApp.getRealTimeUserCumulativeDelta(token1.address, testWalletAddress));
@@ -240,15 +242,15 @@ describe("SuperApp Tests", function () {
             await logCumulatives();
             await logAllBalances();
             await logSumOfAllBalances();
-
+            
             // create flow of token0 into the Super App
             console.log('\n_____ LP token0 --> token1 _____')
             const createFlowOperation = sf.cfaV1.createFlow({
                 sender: testWalletAddress,
                 receiver: superApp.address,
                 superToken: token0.address,
-                flowRate: "100000000000"
-            }); //100000000000
+                flowRate: "10000000000000"
+            });
             const createFlowRes = await createFlowOperation.exec(signer);
             await createFlowRes.wait();
             
@@ -263,7 +265,7 @@ describe("SuperApp Tests", function () {
                 sender: testWalletAddress,
                 receiver: superApp.address,
                 superToken: token1.address,
-                flowRate: "100000000000"
+                flowRate: "10000000000000"
             });
             const createFlowRes2 = await createFlowOperation2.exec(signer);
             await createFlowRes2.wait();
@@ -303,7 +305,7 @@ describe("SuperApp Tests", function () {
             await logCumulatives();
             await logAllBalances();
             await logSumOfAllBalances();
-
+            
             // provide liquidity from a second account
             await token0.connect(testWalletSigner).transfer(addr3.address, amnt2); // transfer some tokens to addr3
             await token1.connect(testWalletSigner).transfer(addr3.address, amnt2); // transfer some tokens to addr3
@@ -321,7 +323,7 @@ describe("SuperApp Tests", function () {
             await logCumulatives();
             await logAllBalances();
             await logSumOfAllBalances();
-
+            
             // provide liquidity in the other direction
             console.log('\n_____ LP2 token0 <-- token1 _____')
             const createFlowOperation6 = sf.cfaV1.createFlow({
@@ -332,7 +334,7 @@ describe("SuperApp Tests", function () {
             });
             const createFlowRes6 = await createFlowOperation6.exec(addr3Signer);
             await createFlowRes6.wait();
-
+            
             // all
             await logCumulatives();
             await logAllBalances();
@@ -400,14 +402,14 @@ describe("SuperApp Tests", function () {
             await logCumulatives();
             await logAllBalances();
             await logSumOfAllBalances();
-
+            
             console.log('\n_____ LP2 token0 <-x- token1 _____')
             const deleteFlowOperation2 = sf.cfaV1.deleteFlow({
                 sender: addr3.address,
                 receiver: superApp.address,
                 superToken: token1.address
             });
-            const deleteFlowRes2 = await deleteFlowOperation2.exec(testWalletSigner);
+            const deleteFlowRes2 = await deleteFlowOperation2.exec(addr3Signer);
             await deleteFlowRes2.wait();
             
             // all
@@ -428,7 +430,7 @@ describe("SuperApp Tests", function () {
                 receiver: superApp.address,
                 superToken: token0.address
             });
-            const deleteFlowRes3 = await deleteFlowOperation3.exec(testWalletSigner);
+            const deleteFlowRes3 = await deleteFlowOperation3.exec(addr3Signer);
             await deleteFlowRes3.wait();
 
             // all
