@@ -93,6 +93,14 @@ contract SuperApp is SuperAppBase, IAqueductHost {
 
     /* --- Helper functions --- */
 
+    function getFlowIn(ISuperToken token) external view returns (uint128 flowIn) {
+        if (token == token0) {
+            flowIn = flowIn0;
+        } else {
+            flowIn = flowIn1;
+        }
+    }
+
     function getUserFromCtx(bytes calldata _ctx)
         internal
         view
