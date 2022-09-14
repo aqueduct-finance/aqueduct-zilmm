@@ -7,7 +7,6 @@ pragma solidity >=0.5.16;
 // resolution: 1 / 2**128
 
 library UQ128x128 {
-
     uint256 constant Q128 = 2**128;
 
     // decode a UQ128x128 to a uint128

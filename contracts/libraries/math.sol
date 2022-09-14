@@ -2,7 +2,6 @@
 pragma solidity >=0.5.16;
 
 library math {
-
     // computes the absolute difference between two unsigned values
     function difference(uint256 x, uint256 y) internal pure returns (uint256) {
         return x > y ? x - y : y - x;
