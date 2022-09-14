@@ -4,7 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "solhint": "./node_modules/.bin/solhint -f table contracts/**/*.sol",
+    "prettier:solidity": "./node_modules/.bin/prettier --write contracts/**/*.sol"
   },
   "keywords": [],
   "author": "",
@@ -21,7 +23,11 @@
     "ethereum-waffle": "^3.4.4",
     "ethers": "^5.6.5",
     "fs": "^0.0.1-security",
-    "hardhat": "^2.9.5"
+    "hardhat": "^2.9.5",
+    "prettier": "^2.7.1",
+    "prettier-plugin-solidity": "^1.0.0-beta.24",
+    "solhint": "^3.3.7",
+    "solhint-plugin-prettier": "^0.0.5"
   },
   "dependencies": {
     "@nomiclabs/hardhat-truffle5": "^2.0.6",
