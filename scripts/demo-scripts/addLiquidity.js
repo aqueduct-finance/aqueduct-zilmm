@@ -10,8 +10,8 @@ const LP_ADDRESS = "0x888D08001F91D0eEc2f16364779697462A9A713D"; // swap this fo
 
 const main = async () => {
     // GET CONTRACTS
-    const superApp = await hre.ethers.getContractAt(
-        "SuperApp",
+    const pool = await hre.ethers.getContractAt(
+        "Pool",
         superAppAddress
     );
     const token0 = await hre.ethers.getContractAt(
@@ -42,7 +42,7 @@ const main = async () => {
     const createFlowOperation = superfluid.cfaV1.createFlow(
         {
             sender: LP_ADDRESS,
-            receiver: superApp.address,
+            receiver: pool.address,
             superToken: token0.address,
             flowRate: "1000000000",
         },
@@ -57,7 +57,7 @@ const main = async () => {
     // create flow of token1 into the Super App
     const createFlowOperation2 = superfluid.cfaV1.createFlow({
         sender: LP_ADDRESS,
-        receiver: superApp.address,
+        receiver: pool.address,
         superToken: token1.address,
         flowRate: "1000000000",
     });

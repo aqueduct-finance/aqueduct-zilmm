@@ -11,7 +11,7 @@ import "./libraries/math.sol";
 import "./interfaces/IAqueductHost.sol";
 import "./interfaces/IAqueductToken.sol";
 
-contract SuperApp is SuperAppBase, IAqueductHost {
+contract Pool is SuperAppBase, IAqueductHost {
     using UQ128x128 for uint256;
 
     /* --- Superfluid --- */

@@ -241,8 +241,8 @@ const main = async () => {
     const signer = provider.getSigner();
 
     // GET CONTRACTS
-    const superApp = await hre.ethers.getContractAt(
-        "SuperApp",
+    const pool = await hre.ethers.getContractAt(
+        "Pool",
         superAppAddress
     );
     const token0 = await hre.ethers.getContractAt(
@@ -260,7 +260,7 @@ const main = async () => {
     const fdaiContract = new ethers.Contract(FDAI_ADDRESS, FDAI_ABI, signer);
 
     // INITIALIZE POOL
-    await superApp.initialize(token0.address, token1.address, 0, 0);
+    await pool.initialize(token0.address, token1.address, 0, 0);
 
     // UPGRADE TOKENS
     const amount = "100000000000000000";
