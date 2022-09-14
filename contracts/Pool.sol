@@ -231,7 +231,7 @@ contract Pool is SuperAppBase, IAqueductHost {
     }
 
     function getUserCumulativeDelta(
-    address token,
+        address token,
     address user,
     uint256 timestamp
     ) public view returns (uint256 cumulativeDelta) {
