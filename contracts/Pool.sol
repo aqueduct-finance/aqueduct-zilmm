@@ -7,7 +7,7 @@ import {CFAv1Library} from "@superfluid-finance/ethereum-contracts/contracts/app
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 
 import "./libraries/UQ128x128.sol";
-import "./libraries/math.sol";
+import "./libraries/Math.sol";
 import "./interfaces/IAqueductHost.sol";
 import "./interfaces/IAqueductToken.sol";
 
@@ -149,7 +149,7 @@ contract Pool is SuperAppBase, IAqueductHost {
             return UQ128x128.Q128;
         } else {
             return
-                math.difference(userRatio, poolRatio) / (userRatio + poolRatio);
+                Math.difference(userRatio, poolRatio) / (userRatio + poolRatio);
         }
     }
 
@@ -406,8 +406,8 @@ contract Pool is SuperAppBase, IAqueductHost {
             userPriceCumulatives[address(this)].flowOut1 -= relFlowOut1;
         }
 
-        flowIn0 = math.safeUnsignedAdd(_flowIn0, relFlowIn0);
-        flowIn1 = math.safeUnsignedAdd(_flowIn1, relFlowIn1);
+        flowIn0 = Math.safeUnsignedAdd(_flowIn0, relFlowIn0);
+        flowIn1 = Math.safeUnsignedAdd(_flowIn1, relFlowIn1);
 
         blockTimestampLast = blockTimestamp;
     }
@@ -437,11 +437,11 @@ contract Pool is SuperAppBase, IAqueductHost {
         }
 
         // calculate expected pool reserves
-        _flowIn0 = math.safeUnsignedAdd(
+        _flowIn0 = Math.safeUnsignedAdd(
             _flowIn0,
             userFlowIn0 - previousUserFlowIn0
         );
-        _flowIn1 = math.safeUnsignedAdd(
+        _flowIn1 = Math.safeUnsignedAdd(
             _flowIn1,
             userFlowIn1 - previousUserFlowIn1
         );
