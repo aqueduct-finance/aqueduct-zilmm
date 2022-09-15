@@ -6,9 +6,9 @@ describe("AqueductToken", () => {
   let mockERC20;
 
   before(async () => {
-    const superfluidToken = "0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9";
+    const superfluidHost = "0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9";
     Pool = await ethers.getContractFactory("Pool");
-    pool = await Pool.deploy(superfluidToken);
+    pool = await Pool.deploy(superfluidHost);
     await pool.deployed();
 
     const MockERC20 = await ethers.getContractFactory("MockERC20");
@@ -16,7 +16,7 @@ describe("AqueductToken", () => {
     await mockERC20.deployed();
 
     const AqueductToken = await ethers.getContractFactory("AqueductToken");
-    aqueductToken = await AqueductToken.deploy(superfluidToken, pool.address);
+    aqueductToken = await AqueductToken.deploy(superfluidHost, pool.address);
     await aqueductToken.deployed();
     await aqueductToken.initialize(
       mockERC20.address,
