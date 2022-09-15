@@ -231,8 +231,8 @@ contract Pool is SuperAppBase, IAqueductHost {
     }
 
     function getUserCumulativeDelta(
-    address token,
-    address user,
+        address token,
+        address user,
         uint256 timestamp
     ) public view returns (uint256 cumulativeDelta) {
         if (token == address(token0)) {
@@ -270,7 +270,7 @@ contract Pool is SuperAppBase, IAqueductHost {
     ) public view returns (int256 reward) {
         if (user == address(this)) {
             //reward = 0;
-            
+
             // prev: temp comment out:
             if (token == address(token0)) {
                 (uint256 feesTotal, ) = getFeeCumulativesAtTime(timestamp);
@@ -281,7 +281,8 @@ contract Pool is SuperAppBase, IAqueductHost {
                         UQ128x128.decode(
                             (feesTotal - feesInitial) * rewards0CumulativeLast
                         )
-                    ) * -1;
+                    ) *
+                    -1;
             } else if (token == address(token1)) {
                 (, uint256 feesTotal) = getFeeCumulativesAtTime(timestamp);
                 uint256 feesInitial = userPriceCumulatives[user]
@@ -291,9 +292,9 @@ contract Pool is SuperAppBase, IAqueductHost {
                         UQ128x128.decode(
                             (feesTotal - feesInitial) * rewards1CumulativeLast
                         )
-                    ) * -1;
+                    ) *
+                    -1;
             }
-            
         } else {
             if (token == address(token0)) {
                 if (flowIn0 > 0) {
@@ -471,11 +472,11 @@ contract Pool is SuperAppBase, IAqueductHost {
         // TODO: underflow is technically possible here, add checks?
         fees0CumulativeLast -= UQ128x128.decode(
             uint96(previousUserFlowIn0) *
-            (UQ128x128.Q128 - userRewardPercentages[user].reward0Percentage)
+                (UQ128x128.Q128 - userRewardPercentages[user].reward0Percentage)
         );
         fees1CumulativeLast -= UQ128x128.decode(
             uint96(previousUserFlowIn1) *
-            (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
+                (UQ128x128.Q128 - userRewardPercentages[user].reward1Percentage)
         );
 
         // set both reward percentages
