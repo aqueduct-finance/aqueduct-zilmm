@@ -1,62 +1,77 @@
-/*const { expect } = require("chai");
+const { expect } = require("chai");
 const { ethers } = require("hardhat");
 
-// Pre-requisites
-// - Tests against mainnet POLYGON using forking using TEST_ADDRESS
-// - TEST_ADDRESS wallet needs some aqueductToken
-// - TEST_ADDRESS wallet should not have any SuperToken
-
-// Polygon addresses
-const SUPERFLUID_HOST = "0x3E14dC1b13c488a8d5D310918780c983bD5982E7";
-const DAI_ADDRESS = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063";
-const TEST_ADDRESS = "0x3226C9EaC0379F04Ba2b1E1e1fcD52ac26309aeA";
-
 describe("AqueductToken", () => {
-    let aqueductToken;
-    let owner;
-    let dai;
+  let aqueductToken;
+  let mockERC20;
 
-    before(async () => {
-        const AqueductToken = await ethers.getContractFactory("AqueductToken");
-        aqueductToken = await AqueductToken.deploy(SUPERFLUID_HOST);
-        await aqueductToken.deployed();
+  before(async () => {
+    const superfluidToken = "0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9";
+    Pool = await ethers.getContractFactory("Pool");
+    pool = await Pool.deploy(superfluidToken);
+    await pool.deployed();
 
-        await aqueductToken.initialize(
-            DAI_ADDRESS,
-            18,
-            "Aqueduct Token",
-            "AQUA"
-        );
+    const MockERC20 = await ethers.getContractFactory("MockERC20");
+    mockERC20 = await MockERC20.deploy("MockERC20", "MOCK", 0);
+    await mockERC20.deployed();
 
-        await hre.network.provider.request({
-            method: "hardhat_impersonateAccount",
-            params: [TEST_ADDRESS],
-        });
-        owner = await ethers.getSigner(TEST_ADDRESS);
+    const AqueductToken = await ethers.getContractFactory("AqueductToken");
+    aqueductToken = await AqueductToken.deploy(superfluidToken, pool.address);
+    await aqueductToken.deployed();
+    await aqueductToken.initialize(
+      mockERC20.address,
+      18,
+      "Aqueduct Token",
+      "AQUA"
+    );
+  });
 
-        dai = await ethers.getContractAt(
-            "contracts/IERC20.sol:IERC20",
-            DAI_ADDRESS
-        );
+  it("Upgrades DAI to AqueductToken", async () => {
+    const owner = (await ethers.getSigners())[0];
+    mockERC20 = await mockERC20.connect(owner);
+    await mockERC20.mint(owner.address, ethers.utils.parseEther("100"));
+
+    const mockERC20Balance = (
+      await mockERC20.balanceOf(owner.address)
+    ).toString();
+
+    await mockERC20
+      .connect(owner)
+      .approve(aqueductToken.address, mockERC20Balance);
+
+    await aqueductToken.connect(owner).upgrade(mockERC20Balance, {
+      gasLimit: 1000000,
     });
 
-    it("Upgrades holder of DAI tokens to AqueductToken", async () => {
-        const testUserDAIBalance = (
-            await dai.balanceOf(owner.address)
-        ).toString();
+    expect(await aqueductToken.balanceOf(owner.address)).to.equal(
+      mockERC20Balance
+    );
+  });
 
-        await dai
-            .connect(owner)
-            .approve(aqueductToken.address, testUserDAIBalance);
+  it("Downgrades AqueductToken to underlying token", async () => {
+    const owner = (await ethers.getSigners())[1];
+    mockERC20 = await mockERC20.connect(owner);
+    await mockERC20.mint(owner.address, ethers.utils.parseEther("100"));
 
-        aqueductToken = await aqueductToken.connect(owner);
-        await aqueductToken.upgrade(testUserDAIBalance, {
-            gasLimit: 1000000,
-        });
+    const mockERC20Balance = (
+      await mockERC20.balanceOf(owner.address)
+    ).toString();
 
-        expect(await aqueductToken.balanceOf(owner.address)).to.equal(
-            testUserDAIBalance
-        );
+    await mockERC20
+      .connect(owner)
+      .approve(aqueductToken.address, mockERC20Balance);
+
+    await (
+      await aqueductToken.connect(owner).upgrade(mockERC20Balance, {
+        gasLimit: 1000000,
+      })
+    ).wait();
+
+    await aqueductToken.connect(owner).downgrade(mockERC20Balance, {
+      gasLimit: 1000000,
     });
+
+    expect(await aqueductToken.balanceOf(owner.address)).to.equal(0);
+    expect(await mockERC20.balanceOf(owner.address)).to.equal(mockERC20Balance);
+  });
 });
-*/

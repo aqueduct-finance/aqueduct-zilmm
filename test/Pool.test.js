@@ -4,7 +4,7 @@ const IERC20 = artifacts.require("@openzeppelin/contracts/token/ERC20/IERC20.sol
 require("dotenv").config();
 
 // test wallets
-const testWalletAddress = '0xFc25b7BE2945Dd578799D15EC5834Baf34BA28e1';
+const testWalletAddress = "0xFc25b7BE2945Dd578799D15EC5834Baf34BA28e1";
 
 // tokens
 const fdaixAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8';
