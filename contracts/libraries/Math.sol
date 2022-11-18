@@ -7,6 +7,11 @@ library Math {
         return x > y ? x - y : y - x;
     }
 
+    // computes the absolute difference between two signed values
+    function signedDifference(int96 x, int96 y) internal pure returns (int96) {
+        return x > y ? x - y : y - x;
+    }
+
     function safeUnsignedAdd(uint128 a, int96 b)
         internal
         pure
