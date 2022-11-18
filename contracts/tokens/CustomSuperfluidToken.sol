@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: AGPLv3
+// SPDX-License-Identifier: MIT
 pragma solidity 0.8.14;
 
 import {ISuperfluid, ISuperAgreement, ISuperfluidGovernance, ISuperfluidToken, SafeCast, EventsEmitter, FixedSizeData} from "@superfluid-finance/ethereum-contracts/contracts/superfluid/SuperfluidToken.sol";
@@ -158,7 +158,11 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                         (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
                         int256(UQ128x128.Q128);
 
-                    agreementDynamicBalance += _aqueductHost.getUserReward(address(this), account, timestamp);
+                    agreementDynamicBalance += _aqueductHost.getUserReward(
+                        address(this),
+                        account,
+                        timestamp
+                    );
                 }
             }
 
@@ -410,8 +414,10 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
                 // some bad logic to check if the delta came from CFA
                 if (agreementDynamicBalance == delta) {
-                    (uint256 initialTimestamp, , , ) = IConstantFlowAgreementV1(address(activeAgreements[i])).getAccountFlowInfo(this, account);
-                    
+                    (uint256 initialTimestamp, , , ) = IConstantFlowAgreementV1(
+                        address(activeAgreements[i])
+                    ).getAccountFlowInfo(this, account);
+
                     // settle twap balance
                     settleTwapBalance(account, initialTimestamp);
                 } else {
@@ -422,7 +428,10 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
         }
     }
 
-    function settleTwapBalance(address account, uint256 initialTimestamp) public onlyAqueductHost {
+    function settleTwapBalance(address account, uint256 initialTimestamp)
+        public
+        onlyAqueductHost
+    {
         // get cfa agreement
         IConstantFlowAgreementV1 cfaV1 = IConstantFlowAgreementV1(
             address(
@@ -436,7 +445,11 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
         // copy over same logic from realTimeBalanceOf:
         uint256 timestamp = block.timestamp;
-        (int256 agreementDynamicBalance, , ) = cfaV1.realtimeBalanceOf(this, account, timestamp);
+        (int256 agreementDynamicBalance, , ) = cfaV1.realtimeBalanceOf(
+            this,
+            account,
+            timestamp
+        );
 
         // get TWAP net flow
         int96 twapNetFlowRate = _aqueductHost.getTwapNetFlowRate(
@@ -459,13 +472,18 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
                 (int256(twapNetFlowRate) * int256(cumulativeDelta)) /
                 int256(UQ128x128.Q128);
 
-            agreementDynamicBalance += _aqueductHost.getUserReward(address(this), account, timestamp);
+            agreementDynamicBalance += _aqueductHost.getUserReward(
+                address(this),
+                account,
+                timestamp
+            );
         }
 
         _settleBalance(account, agreementDynamicBalance);
     }
 
     event simpleSettledBalance(int256 balance, int256 delta);
+
     function _settleBalance(address account, int256 delta) internal {
         emit simpleSettledBalance(_balances[account], delta);
         _balances[account] = _balances[account] + delta;
@@ -560,7 +578,8 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
     modifier onlyAqueductHost() {
         require(
-            address(_aqueductHost) == msg.sender || _host.isAgreementClassListed(ISuperAgreement(msg.sender)),
+            address(_aqueductHost) == msg.sender ||
+                _host.isAgreementClassListed(ISuperAgreement(msg.sender)),
             "SuperfluidToken: Only aqueduct host contract allowed"
         );
         _;

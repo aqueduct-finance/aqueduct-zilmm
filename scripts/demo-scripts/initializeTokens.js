@@ -8,14 +8,14 @@ const FDAI_ADDRESS = "0x15F0Ca26781C3852f8166eD2ebce5D18265cceb7";
 
 const main = async () => {
     // DEPLOY SUPER APP
-    const SuperApp = await ethers.getContractFactory("SuperApp");
-    const superApp = await SuperApp.deploy(SUPERFLUID_HOST);
-    await superApp.deployed();
+    const Pool = await ethers.getContractFactory("Pool");
+    const pool = await Pool.deploy(SUPERFLUID_HOST);
+    await pool.deployed();
     fs.writeFileSync(
         "superAppAddress.js",
-        `exports.superAppAddress = "${superApp.address}"`
+        `exports.superAppAddress = "${pool.address}"`
     );
-    console.log("SuperApp deployed to:", superApp.address);
+    console.log("Pool deployed to:", pool.address);
 
     // DEPLOY TOKENS
     const AqueductToken = await ethers.getContractFactory("AqueductToken");

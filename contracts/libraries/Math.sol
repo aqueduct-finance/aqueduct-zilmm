@@ -1,7 +1,7 @@
-pragma solidity >=0.5.16;
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
 
-library math {
-
+library Math {
     // computes the absolute difference between two unsigned values
     function difference(uint256 x, uint256 y) internal pure returns (uint256) {
         return x > y ? x - y : y - x;

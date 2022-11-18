@@ -6,11 +6,11 @@ const superfluidHost = '0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9'; // rinkeby:
 //const fDAIx = '0x5D8B4C2554aeB7e86F387B4d6c00Ac33499Ed01f';
 
 const main = async () => {
-  const SuperApp = await hre.ethers.getContractFactory("SuperApp");
-  const superApp = await SuperApp.deploy(superfluidHost);
-  await superApp.deployed();
+  const Pool = await hre.ethers.getContractFactory("Pool");
+  const pool = await Pool.deploy(superfluidHost);
+  await pool.deployed();
 
-  console.log("SuperApp deployed to:", superApp.address);
+  console.log("Pool deployed to:", pool.address);
 }
 
 const runMain = async () => {
