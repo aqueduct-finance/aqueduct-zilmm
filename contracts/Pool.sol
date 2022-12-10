@@ -221,33 +221,6 @@ contract Pool is SuperAppBase {
         indexData[iId].totalFlowRate = totalFlowRate;
         indexData[iId].blockTimestampLast = uint32(block.timestamp % 2**32);
     }
-/*
-    function createSubscription(
-        uint256 iId,
-        address account,
-        uint128 units
-    )
-        internal
-    {
-        IndexData memory idata = indexData[iId];
-        require(subscriberData[account][idata.token].exists[iId] == false);
-        subscriberData[account][idata.token].iIds.push(iId);
-        subscriberData[account][idata.token].exists[iId] = true;
-        _updateSubscription(iId, account, units);
-    }
-
-    function updateSubscription(
-        uint256 iId,
-        address account,
-        uint128 units
-    )
-        internal
-    {
-        IndexData memory idata = indexData[iId];
-        require(subscriberData[account][idata.token].exists[iId] == true);
-        _updateSubscription(iId, account, units);
-    }
-*/
 
     function crudSubscription(
         uint256 iId,
@@ -273,20 +246,6 @@ contract Pool is SuperAppBase {
             subscriberData[account][idata.token].exists[iId] = false;
             _updateSubscription(iId, account, 0);
         }
-    }
-
-    function deleteSubscription(
-        uint256 iId,
-        address account
-    )
-        internal
-    {
-        IndexData memory idata = indexData[iId];
-        require(subscriberData[account][idata.token].exists[iId] == true);
-        // TODO: find way to remove from sId list
-        // TEMP: just set exist flag to false
-        subscriberData[account][idata.token].exists[iId] = false;
-        _updateSubscription(iId, account, 0);
     }
 
     function _updateSubscription(
@@ -414,11 +373,6 @@ contract Pool is SuperAppBase {
         // safe downcast from uint256 to uint128 -> flowIn is uint128 and feePercentage <= 1
         crudSubscription(sdata.tokenRewardIId, sdata.user, uint128(UQ128x128.decode(sdata.oppTokenFlowIn * rewardPercentage)));
         crudSubscription(sdata.oppTokenRewardIId, sdata.user, uint128(UQ128x128.decode(sdata.tokenFlowIn * rewardPercentage)));
-        /*console.log("-----------------");
-        console.log("REWARD percentage: %s", rewardPercentage);
-        console.log("reward units: %s", uint128(UQ128x128.decode(sdata.oppTokenFlowIn * rewardPercentage)));
-        console.log("opp reward units: %s", uint128(UQ128x128.decode(sdata.tokenFlowIn * rewardPercentage)));
-        console.log("-----------------");*/
 
         // update total flow of incoming token
         updateFlowRate(sdata.tokenIId, (uint96(sdata.poolTokenFlowIn) * 99) / 100); // this adds a 1% pool fee
@@ -479,76 +433,6 @@ contract Pool is SuperAppBase {
         newCtx = _ctx;
     }
 
-/*
-    function afterAgreementUpdated(
-        ISuperToken _superToken,
-        address, //_agreementClass,
-        bytes32, // _agreementId,
-        bytes calldata, // _agreementData,
-        bytes calldata, //_cbdata,
-        bytes calldata _ctx
-    ) external override onlyHost returns (bytes memory newCtx) {
-        require(
-            address(_superToken) == address(token0) ||
-                address(_superToken) == address(token1),
-            "RedirectAll: token not in pool"
-        );
-
-        IndexIdStruct memory iIds;
-        (
-            iIds.tokenIId,
-            iIds.oppTokenIId,
-            iIds.tokenRewardIId,
-            iIds.oppTokenRewardIId
-        ) = getIndexIds(_superToken);
-
-        // update user subscription
-        address user = getUserFromCtx(_ctx);
-        uint128 flowIn = getFlowRateIn(_superToken, user);
-        updateSubscription(iIds.oppTokenIId, user, flowIn); // units == flowIn
-
-        // update total flow of incoming token
-        int96 totalFlow = cfa.getNetFlow(_superToken, address(this));
-        updateFlowRate(iIds.tokenIId, (uint96(totalFlow) * 99) / 100);
-
-        // return ctx
-        newCtx = _ctx;
-    }
-
-    function afterAgreementTerminated(
-        ISuperToken _superToken,
-        address, //_agreementClass,
-        bytes32, // _agreementId,
-        bytes calldata, // _agreementData
-        bytes calldata, //_cbdata,
-        bytes calldata _ctx
-    ) external override onlyHost returns (bytes memory newCtx) {
-        require(
-            address(_superToken) == address(token0) ||
-                address(_superToken) == address(token1),
-            "RedirectAll: token not in pool"
-        );
-
-        IndexIdStruct memory iIds;
-        (
-            iIds.tokenIId,
-            iIds.oppTokenIId,
-            iIds.tokenRewardIId,
-            iIds.oppTokenRewardIId
-        ) = getIndexIds(_superToken);
-
-        // delete user subscription
-        address user = getUserFromCtx(_ctx);
-        deleteSubscription(iIds.oppTokenIId, user);
-
-        // update total flow of incoming token
-        int96 totalFlow = cfa.getNetFlow(_superToken, address(this));
-        updateFlowRate(iIds.tokenIId, (uint96(totalFlow) * 99) / 100);
-
-        // return ctx
-        newCtx = _ctx;
-    }
-*/
     /**************************************************************************
      * Helpers
      *************************************************************************/
