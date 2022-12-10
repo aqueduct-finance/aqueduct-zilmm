@@ -293,7 +293,7 @@ describe("SuperApp Tests", function () {
             await logAllBalances();
             await logSumOfAllBalances();
 
-            await delay(3600000);
+            await delay(36000);
 
             // all
             await logAllBalances();
@@ -347,7 +347,7 @@ describe("SuperApp Tests", function () {
                 sender: addr2.address,
                 receiver: superApp.address,
                 superToken: token1.address,
-                flowRate: "5000000"//"5000000"
+                flowRate: "1000000000000"//"5000000"
             });
             const createFlowRes4 = await createFlowOperation4.exec(addr2Signer);
             await createFlowRes4.wait();

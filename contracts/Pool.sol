@@ -492,7 +492,7 @@ contract Pool is SuperAppBase {
         )
     {
         (, int96 _tokenFlowIn, , ) = cfa.getFlow(token, user, address(this));
-        (, int96 _oppTokenFlowIn, , ) = cfa.getFlow(token, user, address(this));
+        (, int96 _oppTokenFlowIn, , ) = cfa.getFlow(oppToken, user, address(this));
         poolTokenFlowIn = uint128(uint96(cfa.getNetFlow(token, address(this))));
         poolOppTokenFlowIn = uint128(uint96(cfa.getNetFlow(oppToken, address(this))));
         tokenFlowIn = uint128(uint96(_tokenFlowIn));
