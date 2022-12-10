@@ -13,7 +13,7 @@ import {IERC777Recipient} from "@openzeppelin/contracts/token/ERC777/IERC777Reci
 import {IERC777Sender} from "@openzeppelin/contracts/token/ERC777/IERC777Sender.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 
-import "./IAqueductHost.sol";
+//import "./IAqueductHost.sol";
 import {CustomSuperfluidToken} from "./CustomSuperfluidToken.sol";
 
 contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
@@ -30,7 +30,7 @@ contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
        variables are added APPEND-ONLY. Re-ordering variables can
        permanently BREAK the deployed proxy contract. */
 
-    constructor(ISuperfluid host, IAqueductHost aqueductHost)
+    constructor(ISuperfluid host, ISuperAgreement aqueductHost)
         CustomSuperfluidToken(host, aqueductHost)
     // solhint-disable-next-line no-empty-blocks
     {
