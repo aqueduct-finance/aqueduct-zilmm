@@ -222,6 +222,25 @@ contract Pool is SuperAppBase {
         indexData[iId].blockTimestampLast = uint32(block.timestamp % 2**32);
     }
 
+    function getIndexData(
+        uint256 iId
+    ) 
+        public
+        view
+        returns (
+            uint32 blockTimestampLast,
+            uint96 totalFlowRate,
+            uint256 cumulativeLast,
+            uint128 totalUnits
+        )
+    {
+        IndexData memory idata = indexData[iId];
+        blockTimestampLast = idata.blockTimestampLast;
+        totalFlowRate = idata.totalFlowRate;
+        cumulativeLast = idata.cumulativeLast;
+        totalUnits = idata.totalUnits;
+    }
+
     function crudSubscription(
         uint256 iId,
         address account,
@@ -296,6 +315,23 @@ contract Pool is SuperAppBase {
         // update subscription
         subscriberData[account][idata.token].subscriptions[iId].units = units;
         subscriberData[account][idata.token].subscriptions[iId].initialCumulative = indexData[iId].cumulativeLast;
+    }
+
+    function getSubscriberData(
+        ISuperfluidToken token,
+        address account,
+        uint256 iId
+    ) 
+        public
+        view
+        returns (
+            uint256 initialCumulative,
+            uint128 units
+        )
+    {
+        SubscriptionData memory sdata = subscriberData[account][token].subscriptions[iId];
+        initialCumulative = sdata.initialCumulative;
+        units = sdata.units;
     }
 
     function _getCumulativeAtTime(
@@ -530,5 +566,81 @@ contract Pool is SuperAppBase {
             "RedirectAll: support only one host"
         );
         _;
+    }
+
+    /**************************************************************************
+     * Getters
+     *************************************************************************/
+    
+    function _getUserData(
+        ISuperToken token,
+        address account,
+        uint256 time,
+        uint256 iId
+    )
+        internal
+        view
+        returns(
+            uint256 initialCumulative,
+            uint256 realTimeCumulative,
+            uint128 units
+        )
+    {
+        (initialCumulative, units) = getSubscriberData(token, account, iId);
+
+        (
+            uint32 blockTimestampLast,
+            uint96 totalFlowRate,
+            uint256 cumulativeLast,
+            uint128 totalUnits 
+        ) = getIndexData(iId);
+
+        realTimeCumulative = _getCumulativeAtTime(
+            time, 
+            blockTimestampLast, 
+            cumulativeLast, 
+            totalFlowRate, 
+            totalUnits
+        );
+    }
+
+    function getUserSwapData(
+        ISuperToken token,
+        address account,
+        uint256 time
+    )
+        external
+        view
+        returns (
+            uint256 initialCumulative,
+            uint256 realTimeCumulative,
+            uint128 units
+        )
+    {
+        (
+            initialCumulative, 
+            realTimeCumulative, 
+            units
+        ) = _getUserData(token, account, time, address(token) == address(token0) ? token0IndexId : token1IndexId);
+    }
+
+    function getUserRewardData(
+        ISuperToken token,
+        address account,
+        uint256 time
+    )
+        external
+        view
+        returns (
+            uint256 initialCumulative,
+            uint256 realTimeCumulative,
+            uint128 units
+        )
+    {
+        (
+            initialCumulative, 
+            realTimeCumulative, 
+            units
+        ) = _getUserData(token, account, time, address(token) == address(token0) ? token0RewardIndexId : token1RewardIndexId);
     }
 }

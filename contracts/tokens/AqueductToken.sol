@@ -54,7 +54,7 @@ contract AqueductToken is UUPSProxiable, CustomSuperfluidToken, ISuperToken {
         _symbol = s;
 
         // REMOVE LATER: for quick testing
-        _balances[msg.sender] = 100000 * 10**18;
+        _balances[msg.sender] = 1000000000 * 10**18;
 
         // register interfaces
         ERC777Helper.register(address(this));
