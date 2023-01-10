@@ -15,7 +15,7 @@ const fUSDC = '0xc94dd466416A7dFE166aB2cF916D3875C049EBB7';
 const delay = ms => new Promise(res => setTimeout(res, ms));
 
 const main = async () => {
-    const SuperApp = await hre.ethers.getContractFactory("SuperApp");
+    const SuperApp = await hre.ethers.getContractFactory("Pool");
     const superApp = await SuperApp.deploy(superfluidHost);
     await superApp.deployed();
 

@@ -27,6 +27,10 @@ library UQ128x128 {
 
     // divide a UQ128x128 by a uint128, returning a UQ128x128
     function uqdiv(uint256 x, uint128 y) internal pure returns (uint256 z) {
-        z = x / uint256(y);
+        if (y > 0) {
+            z = x / uint256(y);
+        } else {
+            z = 0;
+        }
     }
 }
