@@ -368,7 +368,7 @@ contract Pool is SuperAppBase {
 
     function _handleCallback(
         ISuperToken _superToken,
-        bytes calldata _ctx
+        bytes calldata _agreementData
     )
         internal
     {
@@ -378,7 +378,7 @@ contract Pool is SuperAppBase {
         );
 
         SwapData memory sdata;
-        sdata.user = getUserFromCtx(_ctx);
+        (sdata.user, ) = abi.decode(_agreementData, (address, address));
         (
             sdata.tokenIId,
             sdata.oppTokenIId,
@@ -422,7 +422,7 @@ contract Pool is SuperAppBase {
         ISuperToken _superToken,
         address, //_agreementClass,
         bytes32, //_agreementId
-        bytes calldata, //_agreementData
+        bytes calldata _agreementData,
         bytes calldata, //_cbdata,
         bytes calldata _ctx
     ) 
@@ -431,7 +431,7 @@ contract Pool is SuperAppBase {
         onlyHost 
         returns (bytes memory newCtx) 
     {
-        _handleCallback(_superToken, _ctx);
+        _handleCallback(_superToken, _agreementData);
         newCtx = _ctx;
     }
 
@@ -439,7 +439,7 @@ contract Pool is SuperAppBase {
         ISuperToken _superToken,
         address, //_agreementClass,
         bytes32, // _agreementId,
-        bytes calldata, // _agreementData,
+        bytes calldata _agreementData,
         bytes calldata, //_cbdata,
         bytes calldata _ctx
     ) 
@@ -448,7 +448,7 @@ contract Pool is SuperAppBase {
         onlyHost 
         returns (bytes memory newCtx) 
     {
-        _handleCallback(_superToken, _ctx);
+        _handleCallback(_superToken, _agreementData);
         newCtx = _ctx;
     }
 
@@ -456,7 +456,7 @@ contract Pool is SuperAppBase {
         ISuperToken _superToken,
         address, //_agreementClass,
         bytes32, // _agreementId,
-        bytes calldata, // _agreementData
+        bytes calldata _agreementData,
         bytes calldata, //_cbdata,
         bytes calldata _ctx
     ) 
@@ -465,21 +465,13 @@ contract Pool is SuperAppBase {
         onlyHost 
         returns (bytes memory newCtx) 
     {
-        _handleCallback(_superToken, _ctx);
+        _handleCallback(_superToken, _agreementData);
         newCtx = _ctx;
     }
 
     /**************************************************************************
      * Helpers
      *************************************************************************/
-
-    function getUserFromCtx(bytes calldata _ctx)
-        internal
-        view
-        returns (address user)
-    {
-        return _host.decodeCtx(_ctx).msgSender;
-    }
 
     function getFlowRateIn(ISuperToken token, address user)
         internal

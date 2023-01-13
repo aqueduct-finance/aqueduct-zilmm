@@ -1,6 +1,9 @@
 const { Framework } = require('@superfluid-finance/sdk-core');
+const { expect } = require('chai');
 const { ethers } = require("hardhat");
 const IERC20 = artifacts.require("@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20")
+const IAqueductToken = artifacts.require("AqueductToken")
+const IPool = artifacts.require("Pool")
 require("dotenv").config();
 
 // test wallets
@@ -9,6 +12,7 @@ const testWalletAddress = '0xFA4CB7712bAd2eafe1F304d167a31B6E080d43a0';
 // tokens
 const fdaixAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8';
 const daiAddress = '0x88271d333C72e51516B67f5567c728E702b3eeE8';
+const usdcAddress = '0xc94dd466416A7dFE166aB2cF916D3875C049EBB7';
 
 // superfluid
 const superfluidHost = '0x22ff293e14F1EC3A09B137e9e06084AFd63adDF9';
@@ -25,6 +29,10 @@ describe("SuperApp Tests", function () {
     let addr1;
     let addr2;
     let addr3;
+    let addr4;
+    let addr5;
+    let addr6;
+    let addr7;
     let addrs;
     let testWalletSigner;
 
@@ -34,6 +42,10 @@ describe("SuperApp Tests", function () {
     let addr1Signer;
     let addr2Signer;
     let addr3Signer;
+    let addr4Signer;
+    let addr5Signer;
+    let addr6Signer;
+    let addr7Signer;
 
     // delay helper function
     const delay = async (seconds) => {
@@ -145,7 +157,7 @@ describe("SuperApp Tests", function () {
     // runs before every test
     beforeEach(async function () {
         // get signers
-        [owner, addr1, addr2, addr3, ...addrs] = await ethers.getSigners();
+        [owner, addr1, addr2, addr3, addr4, addr5, addr6, addr7, ...addrs] = await ethers.getSigners();
         await hre.network.provider.request({
             method: "hardhat_impersonateAccount",
             params: [testWalletAddress],
@@ -202,6 +214,30 @@ describe("SuperApp Tests", function () {
         let addr3PC = '0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6';
         addr3Signer = sf.createSigner({
             privateKey: addr3PC,
+            provider: ethers.provider,
+        })
+
+        let addr4PC = '0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a';
+        addr4Signer = sf.createSigner({
+            privateKey: addr4PC,
+            provider: ethers.provider,
+        })
+
+        let addr5PC = '0x8b3a350cf5c34c9194ca85829a2df0ec3153be0318b5e2d3348e872092edffba';
+        addr5Signer = sf.createSigner({
+            privateKey: addr5PC,
+            provider: ethers.provider,
+        })
+
+        let addr6PC = '0x92db14e403b83dfe3df233f83dfa3a0d7096f21ca9b0d6d6b8d88b2b4ec1564e';
+        addr6Signer = sf.createSigner({
+            privateKey: addr6PC,
+            provider: ethers.provider,
+        })
+
+        let addr7PC = '0x4bbbf85ce3377467afe5d46f804f221813b2bb87f24d81f60f1fcdbf7cbf4356';
+        addr7Signer = sf.createSigner({
+            privateKey: addr7PC,
             provider: ethers.provider,
         })
     })
@@ -487,6 +523,75 @@ describe("SuperApp Tests", function () {
             // all
             await logAllBalances();
             await logSumOfAllBalances();
+        }),
+        it("Flow gets liquidated", async function () {
+            // upgrade tokens
+            const daiContract = await ethers.getContractAt(IERC20.abi, daiAddress);
+            let amnt = '100000000000000000000'; // 100
+            await daiContract.connect(testWalletSigner).approve(token0.address, amnt);
+            await token0.connect(testWalletSigner).upgrade(amnt);
+            await daiContract.connect(testWalletSigner).approve(token1.address, amnt);
+            await token1.connect(testWalletSigner).upgrade(amnt);
+
+            // Provide liquidity to pool
+            console.log('\n_____ LP token0 --> token1 _____')
+            const createFlowOperation = sf.cfaV1.createFlow({
+                sender: testWalletAddress,
+                receiver: superApp.address,
+                superToken: token0.address,
+                flowRate: "100000000000"
+            });
+            const createFlowRes = await createFlowOperation.exec(signer);
+            await createFlowRes.wait();
+
+            // create flow of token1 into the Super App
+            console.log('\n_____ LP token0 <-- token1 _____')
+            const createFlowOperation2 = sf.cfaV1.createFlow({
+                sender: testWalletAddress,
+                receiver: superApp.address,
+                superToken: token1.address,
+                flowRate: "100000000000"
+            });
+            const createFlowRes2 = await createFlowOperation2.exec(signer);
+            await createFlowRes2.wait();
+
+            // skip some time
+            await delay(3600);
+
+            // perform one way swap as User A
+            console.log('\n_____ User A token0 --> token1 _____')
+            await token0.connect(testWalletSigner).transfer(addr1.address, '10000000000');
+            const createFlowOperation3 = sf.cfaV1.createFlow({
+                sender: addr1.address,
+                receiver: superApp.address,
+                superToken: token0.address,
+                flowRate: "10000"
+            });
+            const createFlowRes3 = await createFlowOperation3.exec(addr1Signer);
+            await createFlowRes3.wait();
+
+            await delay(900000); // fast forward so that User A's stream can be liquidated
+
+            // liquidate User A's stream from another account
+            console.log('\n_____ User A token0 -x-> token1 _____ (liquidation) ')
+            const deleteFlowOperation = sf.cfaV1.deleteFlow({
+                sender: addr1.address,
+                receiver: superApp.address,
+                superToken: token0.address
+            });
+            const deleteFlowRes = await deleteFlowOperation.exec(testWalletSigner);
+            await deleteFlowRes.wait();
+
+            // total units of token 1 should == total flow of token 0 into pool
+            const indexData = await superApp.getIndexData(1);
+            const netFlow = ethers.BigNumber.from(
+                await sf.cfaV1.getNetFlow({
+                    superToken: token0.address,
+                    account: superApp.address,
+                    providerOrSigner: ethers.provider,
+                })
+            );
+            expect(indexData.totalUnits).to.equal(netFlow);
         })
     })
 })
