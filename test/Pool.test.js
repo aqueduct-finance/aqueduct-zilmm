@@ -1,5 +1,6 @@
 const { Framework } = require('@superfluid-finance/sdk-core');
 const { expect } = require('chai');
+const { BigNumber } = require('ethers');
 const { ethers } = require("hardhat");
 const IERC20 = artifacts.require("@openzeppelin/contracts/token/ERC20/IERC20.sol:IERC20")
 const IAqueductToken = artifacts.require("AqueductToken")
@@ -544,7 +545,6 @@ describe("SuperApp Tests", function () {
             const createFlowRes = await createFlowOperation.exec(signer);
             await createFlowRes.wait();
 
-            // create flow of token1 into the Super App
             console.log('\n_____ LP token0 <-- token1 _____')
             const createFlowOperation2 = sf.cfaV1.createFlow({
                 sender: testWalletAddress,
@@ -592,6 +592,94 @@ describe("SuperApp Tests", function () {
                 })
             );
             expect(indexData.totalUnits).to.equal(netFlow);
+        }),
+        it("Delete stream and create another stream", async function () {
+            // upgrade tokens
+            const daiContract = await ethers.getContractAt(IERC20.abi, daiAddress);
+            let amnt = '100000000000000000000'; // 100
+            await daiContract.connect(testWalletSigner).approve(token0.address, amnt);
+            await token0.connect(testWalletSigner).upgrade(amnt);
+            await daiContract.connect(testWalletSigner).approve(token1.address, amnt);
+            await token1.connect(testWalletSigner).upgrade(amnt);
+
+            // Provide liquidity to pool
+            console.log('\n_____ LP token0 --> token1 _____')
+            const createFlowOperation = sf.cfaV1.createFlow({
+                sender: testWalletAddress,
+                receiver: superApp.address,
+                superToken: token0.address,
+                flowRate: "100000000000"
+            });
+            const createFlowRes = await createFlowOperation.exec(signer);
+            await createFlowRes.wait();
+
+            console.log('\n_____ LP token0 <-- token1 _____')
+            const createFlowOperation2 = sf.cfaV1.createFlow({
+                sender: testWalletAddress,
+                receiver: superApp.address,
+                superToken: token1.address,
+                flowRate: "100000000000"
+            });
+            const createFlowRes2 = await createFlowOperation2.exec(signer);
+            await createFlowRes2.wait();
+
+            // skip some time
+            await delay(3600);
+
+            // perform one way swap as User A
+            console.log('\n_____ User A token0 --> token1 _____')
+            await token0.connect(testWalletSigner).transfer(addr1.address, '10000000000');
+            const createFlowOperation3 = sf.cfaV1.createFlow({
+                sender: addr1.address,
+                receiver: superApp.address,
+                superToken: token0.address,
+                flowRate: "10000"
+            });
+            const createFlowRes3 = await createFlowOperation3.exec(addr1Signer);
+            await createFlowRes3.wait();
+
+            // skip some time
+            await delay(3600);
+
+            // delete User A's stream
+            console.log('\n_____ User A token0 -x-> token1 _____ ')
+            const deleteFlowOperation = sf.cfaV1.deleteFlow({
+                sender: addr1.address,
+                receiver: superApp.address,
+                superToken: token0.address
+            });
+            const deleteFlowRes = await deleteFlowOperation.exec(addr1Signer);
+            await deleteFlowRes.wait();
+
+            // skip some time
+            await delay(3600);
+
+            // start stream again from User A
+            console.log('\n_____ User A token0 --> token1 _____')
+            const createFlowOperation4 = sf.cfaV1.createFlow({
+                sender: addr1.address,
+                receiver: superApp.address,
+                superToken: token0.address,
+                flowRate: "10000"
+            });
+            const createFlowRes4 = await createFlowOperation4.exec(addr1Signer);
+            await createFlowRes4.wait();
+
+            // record user A's balance of opposite token
+            const balanceA = await token1.balanceOf(addr1.address);
+
+            // skip some time
+            await delay(3600);
+
+            // balance should be ~ 3600 * 10000 (pool is roughly 1:1 ratio)
+            const balanceB = await token1.balanceOf(addr1.address);
+            const difference = balanceB.sub(balanceA);
+            const expected = ethers.BigNumber.from(3600).mul(10000);
+
+            expect(difference).to.within(
+                expected.mul(98).div(100),
+                expected.mul(102).div(100)
+            );
         })
     })
 })

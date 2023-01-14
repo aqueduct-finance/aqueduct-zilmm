@@ -94,7 +94,7 @@ contract Pool is SuperAppBase {
         uint256 iId;
     }
     struct SubscriptionEntries {
-        mapping(uint256 => bool) exists;
+        mapping(uint256 => uint256) indexIdToArrayPos;
         //mapping(uint256 => uint256) iIdToSubIndex;
         //SubscriptionData[] subscriptions;
         mapping(uint256 => SubscriptionData) subscriptions;
@@ -129,20 +129,18 @@ contract Pool is SuperAppBase {
             uint256[] memory iIdList = subscriberData[account][token].iIds;
 
             for (uint32 i = 0; i < iIdList.length; ++i) {
-                if (subscriberData[account][token].exists[ iIdList[i] ] == true) {
-                    SubscriptionData memory sdata = subscriberData[account][token].subscriptions[ iIdList[i] ];
-                    IndexData memory idata = indexData[ iIdList[i] ];
-                    uint256 realTimeCumulative = _getCumulativeAtTime(
-                        time, 
-                        idata.blockTimestampLast, 
-                        idata.cumulativeLast, 
-                        idata.totalFlowRate, 
-                        idata.totalUnits
-                    );
-                    dynamicBalance = dynamicBalance + (
-                        int256(UQ128x128.decode(uint256(sdata.units) * (realTimeCumulative - sdata.initialCumulative)))
-                    );
-                }
+                SubscriptionData memory sdata = subscriberData[account][token].subscriptions[ iIdList[i] ];
+                IndexData memory idata = indexData[ iIdList[i] ];
+                uint256 realTimeCumulative = _getCumulativeAtTime(
+                    time, 
+                    idata.blockTimestampLast, 
+                    idata.cumulativeLast, 
+                    idata.totalFlowRate, 
+                    idata.totalUnits
+                );
+                dynamicBalance = dynamicBalance + (
+                    int256(UQ128x128.decode(uint256(sdata.units) * (realTimeCumulative - sdata.initialCumulative)))
+                );
             }
         }
 
@@ -250,19 +248,34 @@ contract Pool is SuperAppBase {
     {
         IndexData memory idata = indexData[iId];
         if (units > 0) {
-            if (subscriberData[account][idata.token].exists[iId] == false) {
+            // check if user is not already subscribed to index
+            if (subscriberData[account][idata.token].indexIdToArrayPos[iId] == 0) {
                 // create
                 subscriberData[account][idata.token].iIds.push(iId);
-                subscriberData[account][idata.token].exists[iId] = true;
+                subscriberData[account][idata.token].indexIdToArrayPos[iId] = subscriberData[account][idata.token].iIds.length;
             } 
 
             // update
             _updateSubscription(iId, account, units);
-        } else {
+        } else if (subscriberData[account][idata.token].indexIdToArrayPos[iId] != 0) {
             // delete
-            // TODO: find way to remove from sId list
-            // TEMP: just set exist flag to false
-            subscriberData[account][idata.token].exists[iId] = false;
+
+            // swap with last element of array and pop
+            uint256 arrayPos = subscriberData[account][idata.token].indexIdToArrayPos[iId] - 1;
+            uint256 arrayLength = subscriberData[account][idata.token].iIds.length;
+
+            if (arrayPos < arrayLength) {
+                subscriberData[account][idata.token].iIds[arrayPos] = subscriberData[account][idata.token].iIds[arrayLength - 1];
+                subscriberData[account][idata.token].iIds.pop();
+
+                // update indexIdToArrayPos mappings
+                if (arrayLength > 1) {
+                    uint256 swappediId = subscriberData[account][idata.token].iIds[arrayPos];
+                    subscriberData[account][idata.token].indexIdToArrayPos[swappediId] = arrayPos + 1;
+                }
+                subscriberData[account][idata.token].indexIdToArrayPos[iId] = 0;
+            }
+
             _updateSubscription(iId, account, 0);
         }
     }
