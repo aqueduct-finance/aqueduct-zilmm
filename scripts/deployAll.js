@@ -21,23 +21,38 @@ const main = async () => {
 
     console.log("Pool: ", superApp.address);
 
-    await delay(15000);
+    await delay(60000);
+
+    await hre.run("verify:verify", {
+        address: superApp.address,
+        constructorArguments: [superfluidHost],
+    });
 
     // deploy tokens
     let Token = await hre.ethers.getContractFactory("AqueductToken");
-    token0 = await Token.deploy(superfluidHost, superApp.address);
+    const token0 = await Token.deploy(superfluidHost, superApp.address);
     await token0.deployed();
     await token0.initialize(fDAI, 18, "Aqueduct fDAI", "fDAIxp");
     console.log("fDAIxp (token0): " + token0.address)
 
-    await delay(15000);
+    await delay(60000);
 
-    token1 = await Token.deploy(superfluidHost, superApp.address);
+    await hre.run("verify:verify", {
+        address: token0.address,
+        constructorArguments: [superfluidHost, superApp.address],
+    });
+
+    const token1 = await Token.deploy(superfluidHost, superApp.address);
     await token1.deployed();
     await token1.initialize(fUSDC, 18, "Aqueduct fUSDC", "fUSDCxp");
     console.log("fUSDCxp (token1): " + token1.address)
 
-    await delay(15000);
+    await delay(60000);
+
+    await hre.run("verify:verify", {
+        address: token1.address,
+        constructorArguments: [superfluidHost, superApp.address],
+    });
 
     // init pool
     const poolFee = BigInt((2 ** 128) * 0.01); // 1% fee - multiply by 2^112 to conform to UQ112x112
