@@ -187,6 +187,10 @@ contract Pool is SuperAppBase {
         indexData[iId].token = token;
     }
 
+    event CumulativeUpdated (
+        uint256 cumulativeLast
+    );
+
     function updateFlowRate (
         uint256 iId,
         uint96 totalFlowRate
@@ -214,6 +218,8 @@ contract Pool is SuperAppBase {
 
         // "settle" cumulative based on previous multiplier
         indexData[iId].cumulativeLast = realTimeCumulative;
+
+        emit CumulativeUpdated(realTimeCumulative);
 
         // update index
         indexData[iId].totalFlowRate = totalFlowRate;
@@ -325,6 +331,8 @@ contract Pool is SuperAppBase {
         indexData[iId].totalUnits += units;
         indexData[iId].blockTimestampLast = uint32(block.timestamp % 2**32);
 
+        emit CumulativeUpdated(indexData[iId].cumulativeLast);
+
         // update subscription
         subscriberData[account][idata.token].subscriptions[iId].units = units;
         subscriberData[account][idata.token].subscriptions[iId].initialCumulative = indexData[iId].cumulativeLast;
@@ -430,6 +438,13 @@ contract Pool is SuperAppBase {
         // update flow of rewards index
         updateFlowRate(sdata.tokenRewardIId, (uint96(sdata.poolTokenFlowIn) * 1) / 100); // assuming 1% pool fee
     }
+
+    /* Events for indexing */
+    event AgreementCRUD (
+        ISuperToken superToken,
+        int96 newFlowRate,
+        uint256 initialCumulative
+    );
 
     function afterAgreementCreated(
         ISuperToken _superToken,
