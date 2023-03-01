@@ -118,7 +118,9 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
         for (uint256 i = 0; i <= activeAgreements.length; i++) {
             // manually add dcfa
-            ISuperAgreement agreement = (i < activeAgreements.length) ? activeAgreements[i] : dcfa;
+            ISuperAgreement agreement = (i < activeAgreements.length)
+                ? activeAgreements[i]
+                : dcfa;
 
             // get regular balance
             (
@@ -439,7 +441,8 @@ abstract contract CustomSuperfluidToken is ISuperfluidToken {
 
     modifier onlyAgreement() {
         require(
-            address(dcfa) == msg.sender || _host.isAgreementClassListed(ISuperAgreement(msg.sender)),
+            address(dcfa) == msg.sender ||
+                _host.isAgreementClassListed(ISuperAgreement(msg.sender)),
             "SuperfluidToken: only listed agreeement"
         );
         _;
