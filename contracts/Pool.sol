@@ -133,11 +133,7 @@ contract Pool is SuperAppBase {
     )
         external
         view
-        returns (
-            int256 dynamicBalance,
-            uint256 deposit,
-            uint256 owedDeposit
-        )
+        returns (int256 dynamicBalance, uint256 deposit, uint256 owedDeposit)
     {
         // as a subscriber
         {
@@ -202,10 +198,10 @@ contract Pool is SuperAppBase {
         owedDeposit = 0;
     }
 
-    function createIndex(ISuperfluidToken token, address publisher)
-        internal
-        returns (uint256 iId)
-    {
+    function createIndex(
+        ISuperfluidToken token,
+        address publisher
+    ) internal returns (uint256 iId) {
         // get next index / increment counter
         iId = nextIndexId;
         nextIndexId++;
@@ -245,10 +241,12 @@ contract Pool is SuperAppBase {
 
         // update index
         indexData[iId].totalFlowRate = totalFlowRate;
-        indexData[iId].blockTimestampLast = uint32(block.timestamp % 2**32);
+        indexData[iId].blockTimestampLast = uint32(block.timestamp % 2 ** 32);
     }
 
-    function getIndexData(uint256 iId)
+    function getIndexData(
+        uint256 iId
+    )
         public
         view
         returns (
@@ -338,7 +336,7 @@ contract Pool is SuperAppBase {
         );
         indexData[iId].totalUnits -= sdata.units;
         indexData[iId].totalUnits += units;
-        indexData[iId].blockTimestampLast = uint32(block.timestamp % 2**32);
+        indexData[iId].blockTimestampLast = uint32(block.timestamp % 2 ** 32);
 
         // update subscription
         subscriberData[account][idata.token].subscriptions[iId].units = units;
@@ -555,16 +553,17 @@ contract Pool is SuperAppBase {
      * Helpers
      *************************************************************************/
 
-    function getFlowRateIn(ISuperToken token, address user)
-        internal
-        view
-        returns (uint128)
-    {
+    function getFlowRateIn(
+        ISuperToken token,
+        address user
+    ) internal view returns (uint128) {
         (, int96 flowRate, , ) = cfa.getFlow(token, user, address(this));
         return uint128(uint96(flowRate));
     }
 
-    function getIndexIds(ISuperToken token)
+    function getIndexIds(
+        ISuperToken token
+    )
         internal
         view
         returns (

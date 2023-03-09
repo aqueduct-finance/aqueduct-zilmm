@@ -5,16 +5,62 @@ pragma solidity ^0.8.0;
 import {ISuperToken} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/superfluid/ISuperToken.sol";
 import {IConstantFlowAgreementV1} from "@superfluid-finance/ethereum-contracts/contracts/interfaces/agreements/IConstantFlowAgreementV1.sol";
 import "./interfaces/IFlowScheduler.sol";
+import "./gelato/OpsTaskCreator.sol";
 
-contract DeleteFlowResolver {
+contract DeleteFlowResolverTaskCreator is OpsTaskCreator {
     /// @notice address of deployed Flow Scheduler contract
     IFlowScheduler public flowScheduler;
+
     /// @notice address of deployed CFA contract
     IConstantFlowAgreementV1 public cfa;
 
-    constructor(address _flowScheduler, IConstantFlowAgreementV1 _cfa) {
+    /// @notice ID for gelato task
+    bytes32 public taskId;
+
+    event DeleteFlowTaskCreated(bytes32 taskId);
+
+    constructor(
+        address _flowScheduler,
+        IConstantFlowAgreementV1 _cfa,
+        address payable _ops,
+        address _fundsOwner
+    ) OpsTaskCreator(_ops, _fundsOwner) {
         flowScheduler = IFlowScheduler(_flowScheduler);
         cfa = _cfa;
+    }
+
+    receive() external payable {}
+
+    function createTask(
+        address superToken,
+        address sender,
+        address receiver
+    ) external payable {
+        require(taskId == bytes32(""), "Already started task");
+
+        ModuleData memory moduleData = ModuleData({
+            modules: new Module[](2),
+            args: new bytes[](2)
+        });
+
+        moduleData.modules[0] = Module.RESOLVER;
+        moduleData.modules[1] = Module.PROXY;
+
+        moduleData.args[0] = _resolverModuleArg(
+            address(this),
+            abi.encodeCall(this.checker, (superToken, sender, receiver))
+        );
+        moduleData.args[1] = _proxyModuleArg();
+
+        bytes32 id = _createTask(
+            address(this),
+            abi.encode("executeDeleteFlow(ISuperToken,address,address)"),
+            moduleData,
+            ETH
+        );
+
+        taskId = id;
+        emit DeleteFlowTaskCreated(id);
     }
 
     /**
@@ -38,30 +84,25 @@ contract DeleteFlowResolver {
             receiver
         );
 
-        // 1. end date must be set (flow schedule exists)
-        // 2. end date must have been past
-        // 3. flow must have actually exist to be deleted
-        if (
-            flowSchedule.endDate != 0 &&
-            block.timestamp >= flowSchedule.endDate &&
-            currentFlowRate != 0
-        ) {
-            // return canExec as true and executeDeleteFlow payload
-            return (
-                true,
-                abi.encodeCall(
-                    IFlowScheduler.executeDeleteFlow,
-                    (
-                        ISuperToken(superToken),
-                        sender,
-                        receiver,
-                        "" // not supporting user data
-                    )
-                )
-            );
-        }
+        // TODO: what effect do these strings have on gas?
+        if (flowSchedule.endDate == 0)
+            return (false, bytes("End date must be set"));
+        if (block.timestamp <= flowSchedule.endDate)
+            return (false, bytes("End date must be in the past"));
+        if (currentFlowRate == 0) return (false, bytes("Flow should exist"));
 
-        // return canExec as false and non-executable payload
-        return (false, "0x");
+        // return canExec as true and executeDeleteFlow payload
+        return (
+            true,
+            abi.encodeCall(
+                IFlowScheduler.executeDeleteFlow,
+                (
+                    ISuperToken(superToken),
+                    sender,
+                    receiver,
+                    "" // not supporting user data
+                )
+            )
+        );
     }
 }
